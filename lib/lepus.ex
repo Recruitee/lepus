@@ -14,17 +14,13 @@ defmodule Lepus do
     quote do
       @behaviour Lepus
 
-      if function_exported?(unquote(client), :start_link, 1) do
-        def start_link(init_arg) do
-          init_arg
-          |> Keyword.take([:connection])
-          |> Keyword.put_new(:connection, unquote(Macro.escape(Keyword.get(opts, :connection))))
-          |> Keyword.put(:name, unquote(name))
-          |> Keyword.put(:exchanges, unquote(exchanges))
-          |> unquote(client).start_link()
-        end
-      else
-        def start_link(_), do: :ignore
+      def start_link(init_arg) do
+        init_arg
+        |> Keyword.take([:connection])
+        |> Keyword.put_new(:connection, unquote(Macro.escape(Keyword.get(opts, :connection))))
+        |> Keyword.put(:name, unquote(name))
+        |> Keyword.put(:exchanges, unquote(exchanges))
+        |> unquote(client).start_link()
       end
 
       def child_spec(init_arg) do
