@@ -9,7 +9,6 @@ defmodule Lepus.Client.Server do
 
   use Supervisor
 
-  @impl Client
   def start_link(init_arg) do
     name = init_arg |> Keyword.fetch!(:name)
     Supervisor.start_link(__MODULE__, init_arg, name: name)
