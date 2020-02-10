@@ -1,5 +1,5 @@
 defmodule Lepus.Client.ServerTest do
-  alias Lepus.Client.Server
+  alias Lepus.Client
 
   use ExUnit.Case, async: true
 
@@ -48,7 +48,7 @@ defmodule Lepus.Client.ServerTest do
   describe ".start_link/1" do
     test "starts connection, channels and declares exchanges", %{connection: connection} do
       assert {:ok, server} =
-               Server.start_link(
+               Client.start_link(
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
@@ -71,7 +71,7 @@ defmodule Lepus.Client.ServerTest do
 
     test "starts 2 similar supervisors without errors", %{connection: connection} do
       assert {:ok, _server1} =
-               Server.start_link(
+               Client.start_link(
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
@@ -79,7 +79,7 @@ defmodule Lepus.Client.ServerTest do
                )
 
       assert {:ok, _server2} =
-               Server.start_link(
+               Client.start_link(
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
@@ -93,7 +93,7 @@ defmodule Lepus.Client.ServerTest do
       server_name = new_server_name()
 
       {:ok, _} =
-        Server.start_link(
+        Client.start_link(
           name: server_name,
           connection: connection,
           rabbit_client: RabbitClientMock,
@@ -105,7 +105,7 @@ defmodule Lepus.Client.ServerTest do
 
     test "publishes to rabbit and adds timestamp to opts", %{server_name: server_name} do
       server_name
-      |> Server.publish("exchange1", "my_routing_key", "my_payload", my_key: "my_value")
+      |> Client.publish("exchange1", "my_routing_key", "my_payload", my_key: "my_value")
 
       assert_receive {:publish,
                       [%{type: :channel}, "exchange1", "my_routing_key", "my_payload", opts]}
@@ -115,16 +115,16 @@ defmodule Lepus.Client.ServerTest do
     end
 
     test "uses 1 channel per exchange", %{server_name: server_name} do
-      server_name |> Server.publish("exchange1", "my_routing_key", "my_payload1", [])
+      server_name |> Client.publish("exchange1", "my_routing_key", "my_payload1", [])
       assert_receive {:publish, [channel1, "exchange1", "my_routing_key", "my_payload1", _]}
 
-      server_name |> Server.publish("exchange2", "my_routing_key", "my_payload1", [])
+      server_name |> Client.publish("exchange2", "my_routing_key", "my_payload1", [])
       assert_receive {:publish, [channel2, "exchange2", "my_routing_key", "my_payload1", _]}
 
-      server_name |> Server.publish("exchange1", "my_routing_key", "my_payload2", [])
+      server_name |> Client.publish("exchange1", "my_routing_key", "my_payload2", [])
       assert_receive {:publish, [^channel1, "exchange1", "my_routing_key", "my_payload2", _]}
 
-      server_name |> Server.publish("exchange2", "my_routing_key", "my_payload2", [])
+      server_name |> Client.publish("exchange2", "my_routing_key", "my_payload2", [])
       assert_receive {:publish, [^channel2, "exchange2", "my_routing_key", "my_payload2", _]}
 
       refute Map.equal?(channel1, channel2)
@@ -136,7 +136,7 @@ defmodule Lepus.Client.ServerTest do
       server_name = new_server_name()
 
       {:ok, _} =
-        Server.start_link(
+        Client.start_link(
           name: server_name,
           connection: connection,
           rabbit_client: RabbitClientMock,
@@ -148,7 +148,7 @@ defmodule Lepus.Client.ServerTest do
 
     test "publishes to rabbit and adds timestamp to opts", %{server_name: server_name} do
       server_name
-      |> Server.publish_json("exchange1", "my_routing_key", %{data: "my_payload"},
+      |> Client.publish_json("exchange1", "my_routing_key", %{data: "my_payload"},
         my_key: "my_value"
       )
 
@@ -167,25 +167,25 @@ defmodule Lepus.Client.ServerTest do
 
     test "uses 1 channel per exchange", %{server_name: server_name} do
       server_name
-      |> Server.publish_json("exchange1", "my_routing_key", %{data: "my_payload1"}, [])
+      |> Client.publish_json("exchange1", "my_routing_key", %{data: "my_payload1"}, [])
 
       assert_receive {:publish,
                       [channel1, "exchange1", "my_routing_key", ~s({"data":"my_payload1"}), _]}
 
       server_name
-      |> Server.publish_json("exchange2", "my_routing_key", %{data: "my_payload1"}, [])
+      |> Client.publish_json("exchange2", "my_routing_key", %{data: "my_payload1"}, [])
 
       assert_receive {:publish,
                       [channel2, "exchange2", "my_routing_key", ~s({"data":"my_payload1"}), _]}
 
       server_name
-      |> Server.publish_json("exchange1", "my_routing_key", %{data: "my_payload2"}, [])
+      |> Client.publish_json("exchange1", "my_routing_key", %{data: "my_payload2"}, [])
 
       assert_receive {:publish,
                       [^channel1, "exchange1", "my_routing_key", ~s({"data":"my_payload2"}), _]}
 
       server_name
-      |> Server.publish_json("exchange2", "my_routing_key", %{data: "my_payload2"}, [])
+      |> Client.publish_json("exchange2", "my_routing_key", %{data: "my_payload2"}, [])
 
       assert_receive {:publish,
                       [^channel2, "exchange2", "my_routing_key", ~s({"data":"my_payload2"}), _]}
