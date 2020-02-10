@@ -75,7 +75,7 @@ Create a client if you need to send messages to RabbitMQ.
 ```elixir
 defmodule MyApp.MyRabbitMQClient do
   use Lepus,
-    client: Lepus.Client.Server,
+    client: Lepus.Client,
     exchanges: ["my_exchange1", "my_exchange2"]
 end
 ```
