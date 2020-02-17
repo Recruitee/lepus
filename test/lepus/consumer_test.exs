@@ -317,6 +317,70 @@ defmodule Lepus.ConsumerTest do
                retry_queue: "routing_key.retry"
              } = Lepus.Consumer.build_strategy_data(exchange: "", routing_key: "routing_key")
     end
+
+    test "with delay_exchange defined" do
+      assert %{
+               exchange: "exchange",
+               routing_key: "routing_key",
+               delay_exchange: "delay_exchange",
+               retry_exchange: "exchange.retry",
+               queue: "exchange.routing_key",
+               retry_queue: "exchange.routing_key.retry"
+             } =
+               Lepus.Consumer.build_strategy_data(
+                 exchange: "exchange",
+                 routing_key: "routing_key",
+                 delay_exchange: "delay_exchange"
+               )
+    end
+
+    test "with retry_exchange defined" do
+      assert %{
+               exchange: "exchange",
+               routing_key: "routing_key",
+               delay_exchange: "exchange.delay",
+               retry_exchange: "retry_exchange",
+               queue: "exchange.routing_key",
+               retry_queue: "exchange.routing_key.retry"
+             } =
+               Lepus.Consumer.build_strategy_data(
+                 exchange: "exchange",
+                 routing_key: "routing_key",
+                 retry_exchange: "retry_exchange"
+               )
+    end
+
+    test "with queue defined" do
+      assert %{
+               exchange: "exchange",
+               routing_key: "routing_key",
+               delay_exchange: "exchange.delay",
+               retry_exchange: "exchange.retry",
+               queue: "queue",
+               retry_queue: "exchange.routing_key.retry"
+             } =
+               Lepus.Consumer.build_strategy_data(
+                 exchange: "exchange",
+                 routing_key: "routing_key",
+                 queue: "queue"
+               )
+    end
+
+    test "with retry_queue defined" do
+      assert %{
+               exchange: "exchange",
+               routing_key: "routing_key",
+               delay_exchange: "exchange.delay",
+               retry_exchange: "exchange.retry",
+               queue: "exchange.routing_key",
+               retry_queue: "retry_queue"
+             } =
+               Lepus.Consumer.build_strategy_data(
+                 exchange: "exchange",
+                 routing_key: "routing_key",
+                 retry_queue: "retry_queue"
+               )
+    end
   end
 
   defp new_consumer_name do

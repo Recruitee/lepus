@@ -43,23 +43,21 @@ defmodule Lepus.Consumer do
     exchange = opts |> Keyword.fetch!(:exchange)
     routing_key = opts |> Keyword.fetch!(:routing_key)
 
-    [delay_exchange, retry_exchange, queue, retry_queue] =
-      [
-        [exchange, "delay"],
-        [exchange, "retry"],
-        [exchange, routing_key],
-        [exchange, routing_key, "retry"]
-      ]
-      |> Enum.map(fn list -> list |> Enum.reject(&(&1 in ["", nil])) |> Enum.join(".") end)
-
     %{
       exchange: exchange,
       routing_key: routing_key,
-      delay_exchange: delay_exchange,
-      retry_exchange: retry_exchange,
-      queue: queue,
-      retry_queue: retry_queue
+      delay_exchange: strategy_opt(opts, :delay_exchange, [exchange, "delay"]),
+      retry_exchange: strategy_opt(opts, :retry_exchange, [exchange, "retry"]),
+      queue: strategy_opt(opts, :queue, [exchange, routing_key]),
+      retry_queue: strategy_opt(opts, :retry_queue, [exchange, routing_key, "retry"])
     }
+  end
+
+  defp strategy_opt(opts, key, default_list) do
+    opts
+    |> Keyword.get_lazy(key, fn ->
+      default_list |> Enum.reject(&(&1 in ["", nil])) |> Enum.join(".")
+    end)
   end
 
   def start_link(
