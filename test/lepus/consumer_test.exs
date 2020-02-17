@@ -291,6 +291,34 @@ defmodule Lepus.ConsumerTest do
     end
   end
 
+  describe "build_strategy_data/1" do
+    test "with usual exchange" do
+      assert %{
+               exchange: "usual_exchange",
+               routing_key: "routing_key",
+               delay_exchange: "usual_exchange.delay",
+               retry_exchange: "usual_exchange.retry",
+               queue: "usual_exchange.routing_key",
+               retry_queue: "usual_exchange.routing_key.retry"
+             } =
+               Lepus.Consumer.build_strategy_data(
+                 exchange: "usual_exchange",
+                 routing_key: "routing_key"
+               )
+    end
+
+    test "with default exchange" do
+      assert %{
+               exchange: "",
+               routing_key: "routing_key",
+               delay_exchange: "delay",
+               retry_exchange: "retry",
+               queue: "routing_key",
+               retry_queue: "routing_key.retry"
+             } = Lepus.Consumer.build_strategy_data(exchange: "", routing_key: "routing_key")
+    end
+  end
+
   defp new_consumer_name do
     :"consumer-#{System.unique_integer([:positive, :monotonic])}"
   end

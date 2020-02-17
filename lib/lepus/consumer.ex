@@ -4,21 +4,11 @@ defmodule Lepus.Consumer do
   alias Lepus.RabbitClient
 
   defmacro __using__(opts) do
-    exchange = opts |> Keyword.fetch!(:exchange)
-    routing_key = opts |> Keyword.fetch!(:routing_key)
+    strategy_data = Lepus.Consumer.build_strategy_data(opts)
     rabbit_client = opts |> Keyword.get(:rabbit_client, RabbitClient)
 
     broadway_producer_module =
       opts |> Keyword.get(:broadway_producer_module, BroadwayRabbitMQ.Producer)
-
-    strategy_data = %{
-      routing_key: routing_key,
-      exchange: exchange,
-      delay_exchange: "#{exchange}.delay",
-      retry_exchange: "#{exchange}.retry",
-      queue: "#{exchange}.#{routing_key}",
-      retry_queue: "#{exchange}.#{routing_key}.retry"
-    }
 
     quote do
       use Broadway
@@ -47,6 +37,29 @@ defmodule Lepus.Consumer do
         messages
       end
     end
+  end
+
+  def build_strategy_data(opts) do
+    exchange = opts |> Keyword.fetch!(:exchange)
+    routing_key = opts |> Keyword.fetch!(:routing_key)
+
+    [delay_exchange, retry_exchange, queue, retry_queue] =
+      [
+        [exchange, "delay"],
+        [exchange, "retry"],
+        [exchange, routing_key],
+        [exchange, routing_key, "retry"]
+      ]
+      |> Enum.map(fn list -> list |> Enum.reject(&(&1 in ["", nil])) |> Enum.join(".") end)
+
+    %{
+      exchange: exchange,
+      routing_key: routing_key,
+      delay_exchange: delay_exchange,
+      retry_exchange: retry_exchange,
+      queue: queue,
+      retry_queue: retry_queue
+    }
   end
 
   def start_link(
