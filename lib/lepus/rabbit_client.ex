@@ -12,6 +12,8 @@ defmodule Lepus.RabbitClient do
   def declare_queue(channel, queue, opts), do: Queue.declare(channel, queue, opts)
   def bind_queue(channel, queue, exchange, opts), do: Queue.bind(channel, queue, exchange, opts)
 
+  def declare_direct_exchange(_channel, "", _opts), do: :ok
+
   def declare_direct_exchange(channel, exchange, opts) do
     Exchange.direct(channel, exchange, opts)
   end

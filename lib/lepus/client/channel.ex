@@ -65,9 +65,13 @@ defmodule Lepus.Client.Channel do
   end
 
   @impl GenServer
-  def terminate(_reason, %{rabbit_client: rabbit_client, channel: channel}) do
+  def terminate(_reason, %{rabbit_client: rabbit_client, channel: channel})
+      when not is_nil(channel) do
     rabbit_client.close_channel(channel)
   end
+
+  @impl GenServer
+  def terminate(_reason, _state), do: nil
 
   defp open_channel(rabbit_client, connection_name) do
     connection_name

@@ -52,7 +52,7 @@ defmodule Lepus.Client.ServerTest do
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
-                 exchanges: ["exchange1", "exchange2"]
+                 exchanges: ["exchange1", "exchange2", ""]
                )
 
       assert_receive {:open_connection, [%{type: :connection_opts}]}
@@ -75,7 +75,7 @@ defmodule Lepus.Client.ServerTest do
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
-                 exchanges: ["exchange1", "exchange2"]
+                 exchanges: ["exchange1", "exchange2", ""]
                )
 
       assert {:ok, _server2} =
@@ -83,7 +83,7 @@ defmodule Lepus.Client.ServerTest do
                  name: new_server_name(),
                  connection: connection,
                  rabbit_client: RabbitClientMock,
-                 exchanges: ["exchange1", "exchange2"]
+                 exchanges: ["exchange1", "exchange2", ""]
                )
     end
   end
@@ -97,7 +97,7 @@ defmodule Lepus.Client.ServerTest do
           name: server_name,
           connection: connection,
           rabbit_client: RabbitClientMock,
-          exchanges: ["exchange1", "exchange2"]
+          exchanges: ["exchange1", "exchange2", ""]
         )
 
       {:ok, server_name: server_name}
@@ -121,13 +121,21 @@ defmodule Lepus.Client.ServerTest do
       server_name |> Client.publish("exchange2", "my_routing_key", "my_payload1", [])
       assert_receive {:publish, [channel2, "exchange2", "my_routing_key", "my_payload1", _]}
 
+      server_name |> Client.publish("", "my_routing_key", "my_payload1", [])
+      assert_receive {:publish, [channel3, "", "my_routing_key", "my_payload1", _]}
+
       server_name |> Client.publish("exchange1", "my_routing_key", "my_payload2", [])
       assert_receive {:publish, [^channel1, "exchange1", "my_routing_key", "my_payload2", _]}
 
       server_name |> Client.publish("exchange2", "my_routing_key", "my_payload2", [])
       assert_receive {:publish, [^channel2, "exchange2", "my_routing_key", "my_payload2", _]}
 
+      server_name |> Client.publish("", "my_routing_key", "my_payload1", [])
+      assert_receive {:publish, [^channel3, "", "my_routing_key", "my_payload1", _]}
+
       refute Map.equal?(channel1, channel2)
+      refute Map.equal?(channel1, channel3)
+      refute Map.equal?(channel2, channel3)
     end
   end
 
