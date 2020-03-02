@@ -18,7 +18,9 @@ defmodule Lepus.Client do
   def publish(name, exchange, routing_key, payload, options) do
     options =
       options
-      |> Keyword.put_new_lazy(:timestamp, fn -> DateTime.utc_now() |> DateTime.to_unix() end)
+      |> Keyword.put_new_lazy(:timestamp, fn ->
+        DateTime.utc_now() |> DateTime.to_unix(:microsecond)
+      end)
 
     name
     |> get_registry_name()
