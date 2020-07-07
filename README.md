@@ -41,7 +41,7 @@ defmodule MyApp.MyConsumer do
   # about other options
   @impl Lepus.Consumer
   def options do
-    [producer: [stages: 1], processors: [default: [stages: 1]]]
+    [producer: [concurrency: 1], processors: [default: [concurrency: 1]]]
   end
 
   # Read more here

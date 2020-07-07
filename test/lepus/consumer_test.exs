@@ -89,7 +89,7 @@ defmodule Lepus.ConsumerTest do
 
     @impl Lepus.Consumer
     def options do
-      [producer: [stages: 1], processors: [my_processor_name: [stages: 1]]]
+      [producer: [concurrency: 1], processors: [my_processor_name: [concurrency: 1]]]
     end
 
     def handle_message(_, %{metadata: %{test_pid: test_pid}, data: data} = message, _) do
@@ -167,7 +167,7 @@ defmodule Lepus.ConsumerTest do
       processor_opts =
         broadway_opts |> Keyword.fetch!(:processors) |> Keyword.fetch!(:my_processor_name)
 
-      assert Keyword.fetch!(processor_opts, :stages) == 1
+      assert Keyword.fetch!(processor_opts, :concurrency) == 1
 
       producer_opts = broadway_opts |> Keyword.fetch!(:producer)
 
