@@ -81,27 +81,35 @@ defmodule Lepus.ConsumerTest do
   end
 
   defmodule Consumer do
-    use Lepus.Consumer,
-      exchange: "test_exchange",
-      routing_key: "test_routing_key",
-      rabbit_client: RabbitClientMock,
-      broadway_producer_module: BroadwayProducerMock
+    use Lepus.Consumer
 
     @impl Lepus.Consumer
     def options do
-      [producer: [concurrency: 1], processors: [my_processor_name: [concurrency: 1]]]
+      [
+        exchange: "test_exchange",
+        routing_key: "test_routing_key",
+        rabbit_client: RabbitClientMock,
+        broadway_producer_module: BroadwayProducerMock,
+        processor: [concurrency: 1]
+      ]
     end
 
-    def handle_message(_, %{metadata: %{test_pid: test_pid}, data: data} = message, _) do
-      message =
+    @impl Lepus.Consumer
+    def handle_message(data, %{test_pid: test_pid}) do
+      result =
         if data in ["Failed!", %{"str" => "Failed!"}] do
-          message |> Broadway.Message.failed(":(")
+          {:error, "Failed!"}
         else
-          message
+          :ok
         end
 
-      Process.send(test_pid, {:message_handled, message}, [])
-      message
+      Process.send(test_pid, {:message_handled, data}, [])
+      result
+    end
+
+    @impl Lepus.Consumer
+    def handle_failed(data, %{test_pid: test_pid}, _retry_number) do
+      Process.send(test_pid, {:failed_handled, data}, [])
     end
   end
 
@@ -164,14 +172,13 @@ defmodule Lepus.ConsumerTest do
         |> GenStage.call(:get_state)
         |> Keyword.fetch!(:broadway)
 
-      processor_opts =
-        broadway_opts |> Keyword.fetch!(:processors) |> Keyword.fetch!(:my_processor_name)
+      processor_opts = broadway_opts |> Keyword.fetch!(:processors) |> Keyword.fetch!(:default)
 
       assert Keyword.fetch!(processor_opts, :concurrency) == 1
 
       producer_opts = broadway_opts |> Keyword.fetch!(:producer)
 
-      assert producer_opts |> Keyword.fetch!(:transformer) == {Lepus.Consumer, :transform, []}
+      assert producer_opts |> Keyword.fetch!(:transformer) == {Lepus.Broadway, :transform, []}
 
       assert {BroadwayProducerMock, producer_module_opts} =
                producer_opts |> Keyword.fetch!(:module)
@@ -200,7 +207,7 @@ defmodule Lepus.ConsumerTest do
 
     test "handles message", %{producer: producer} do
       producer |> BroadwayProducerMock.push_message("Hello!")
-      assert_receive {:message_handled, %{data: "Hello!"}}
+      assert_receive {:message_handled, "Hello!"}
       assert_receive {:successful, %{data: "Hello!"}}
     end
 
@@ -212,7 +219,7 @@ defmodule Lepus.ConsumerTest do
 
       parsed_data = %{"str" => "value", "int" => 1}
 
-      assert_receive {:message_handled, %{data: ^parsed_data}}
+      assert_receive {:message_handled, ^parsed_data}
       assert_receive {:successful, %{data: ^parsed_data}}
     end
 
@@ -226,7 +233,8 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, %{data: "Failed!"}}
+      assert_receive {:message_handled, "Failed!"}
+      assert_receive {:failed_handled, "Failed!"}
       assert_receive {:failed, %{data: "Failed!"}}
 
       assert [
@@ -252,7 +260,8 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, %{data: %{"str" => "Failed!"}}}
+      assert_receive {:message_handled, %{"str" => "Failed!"}}
+      assert_receive {:failed_handled, %{"str" => "Failed!"}}
       assert_receive {:failed, %{data: %{"str" => "Failed!"}}}
 
       assert [
@@ -276,7 +285,8 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, %{data: "Failed!"}}
+      assert_receive {:message_handled, "Failed!"}
+      assert_receive {:failed_handled, "Failed!"}
       assert_receive {:failed, %{data: "Failed!"}}
 
       assert [
@@ -301,7 +311,7 @@ defmodule Lepus.ConsumerTest do
                queue: "usual_exchange.routing_key",
                retry_queue: "usual_exchange.routing_key.retry"
              } =
-               Lepus.Consumer.build_strategy_data(
+               Lepus.Consumer.build_strategy_data([],
                  exchange: "usual_exchange",
                  routing_key: "routing_key"
                )
@@ -315,7 +325,7 @@ defmodule Lepus.ConsumerTest do
                retry_exchange: "retry",
                queue: "routing_key",
                retry_queue: "routing_key.retry"
-             } = Lepus.Consumer.build_strategy_data(exchange: "", routing_key: "routing_key")
+             } = Lepus.Consumer.build_strategy_data([], exchange: "", routing_key: "routing_key")
     end
 
     test "with delay_exchange defined" do
@@ -327,7 +337,7 @@ defmodule Lepus.ConsumerTest do
                queue: "exchange.routing_key",
                retry_queue: "exchange.routing_key.retry"
              } =
-               Lepus.Consumer.build_strategy_data(
+               Lepus.Consumer.build_strategy_data([],
                  exchange: "exchange",
                  routing_key: "routing_key",
                  delay_exchange: "delay_exchange"
@@ -343,7 +353,7 @@ defmodule Lepus.ConsumerTest do
                queue: "exchange.routing_key",
                retry_queue: "exchange.routing_key.retry"
              } =
-               Lepus.Consumer.build_strategy_data(
+               Lepus.Consumer.build_strategy_data([],
                  exchange: "exchange",
                  routing_key: "routing_key",
                  retry_exchange: "retry_exchange"
@@ -359,7 +369,7 @@ defmodule Lepus.ConsumerTest do
                queue: "queue",
                retry_queue: "exchange.routing_key.retry"
              } =
-               Lepus.Consumer.build_strategy_data(
+               Lepus.Consumer.build_strategy_data([],
                  exchange: "exchange",
                  routing_key: "routing_key",
                  queue: "queue"
@@ -375,7 +385,7 @@ defmodule Lepus.ConsumerTest do
                queue: "exchange.routing_key",
                retry_queue: "retry_queue"
              } =
-               Lepus.Consumer.build_strategy_data(
+               Lepus.Consumer.build_strategy_data([],
                  exchange: "exchange",
                  routing_key: "routing_key",
                  retry_queue: "retry_queue"
