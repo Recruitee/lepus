@@ -1,7 +1,12 @@
 defmodule Lepus.Client do
-  alias Lepus.Client.Connection
+  @moduledoc """
+  Default `Lepus.Producer` implementation.
+  It uses supervised RabbitMQ connection and channels
+  """
+
   alias Lepus.Client.Channel
   alias Lepus.Client.Channels
+  alias Lepus.Client.Connection
   alias Lepus.Producer
   alias Lepus.RabbitClient
 

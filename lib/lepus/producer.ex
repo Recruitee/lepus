@@ -1,4 +1,8 @@
 defmodule Lepus.Producer do
+  @moduledoc """
+  Producer behaviour
+  """
+
   @callback publish(Supervisor.supervisor(), String.t(), String.t(), String.t(), keyword()) ::
               :ok | AMQP.error()
   @callback publish_json(

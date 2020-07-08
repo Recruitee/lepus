@@ -1,4 +1,6 @@
 defmodule Lepus.RabbitClient do
+  @moduledoc false
+
   alias AMQP.Basic
   alias AMQP.Channel
   alias AMQP.Connection

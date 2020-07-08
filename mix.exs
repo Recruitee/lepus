@@ -22,7 +22,10 @@ defmodule Lepus.MixProject do
   defp deps do
     [
       {:broadway_rabbitmq, "~> 0.6.0"},
-      {:jason, "~> 1.0"}
+      {:jason, "~> 1.0"},
+
+      # Dev tools
+      {:credo, "~> 1.4", only: :dev, runtime: false}
     ]
   end
 end

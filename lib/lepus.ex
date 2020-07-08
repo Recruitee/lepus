@@ -1,4 +1,14 @@
 defmodule Lepus do
+  @moduledoc """
+  Defines a RabbitMQ client.
+  Example usage:
+
+      use Lepus,
+        client: Lepus.Client,
+        exchanges: ["my_exchange1", "my_exchange2"]
+
+  """
+
   @callback publish(String.t(), String.t(), String.t(), keyword()) :: :ok | AMQP.error()
   @callback publish_json(String.t(), String.t(), map() | list(), keyword()) :: :ok | AMQP.error()
 

@@ -1,4 +1,6 @@
 defmodule Lepus.Client.Connection do
+  @moduledoc false
+
   use GenServer
 
   require Logger

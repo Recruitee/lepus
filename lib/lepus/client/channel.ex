@@ -1,4 +1,8 @@
 defmodule Lepus.Client.Channel do
+  @moduledoc false
+
+  alias Lepus.Client.Connection
+
   use GenServer
 
   require Logger
@@ -75,7 +79,7 @@ defmodule Lepus.Client.Channel do
 
   defp open_channel(rabbit_client, connection_name) do
     connection_name
-    |> Lepus.Client.Connection.get_conn()
+    |> Connection.get_conn()
     |> rabbit_client.open_channel()
     |> case do
       {:ok, channel} ->

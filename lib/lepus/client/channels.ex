@@ -1,4 +1,6 @@
 defmodule Lepus.Client.Channels do
+  @moduledoc false
+
   use Supervisor
 
   alias Lepus.Client.Channel

@@ -1,4 +1,37 @@
 defmodule Lepus.Consumer do
+  @moduledoc """
+  Defines a consumer.
+  Example usage:
+
+      defmodule MyApp.MyConsumer do
+        use Lepus.Consumer,
+          exchange: "my_exchange",
+          routing_key: "my_routing_key"
+
+        # Read more here
+        # https://hexdocs.pm/broadway_rabbitmq/BroadwayRabbitMQ.Producer.html
+        # about producer options
+        #
+        # Read more here
+        # https://hexdocs.pm/broadway/Broadway.html#start_link/2
+        # about other options
+        @impl Lepus.Consumer
+        def options do
+          [producer: [concurrency: 1], processors: [default: [concurrency: 1]]]
+        end
+
+        # Read more here
+        # https://hexdocs.pm/broadway/Broadway.html#c:handle_message/3
+        # aboud messages handling
+        @impl Broadway
+        def handle_message(_, message, _) do
+          # do someting with message
+          message
+        end
+      end
+
+  """
+
   @callback options() :: Keyword.t()
 
   alias Lepus.RabbitClient
