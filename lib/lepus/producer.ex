@@ -4,12 +4,12 @@ defmodule Lepus.Producer do
   """
 
   @callback publish(Supervisor.supervisor(), String.t(), String.t(), String.t(), keyword()) ::
-              :ok | AMQP.error()
+              :ok | AMQP.Basic.error()
   @callback publish_json(
               Supervisor.supervisor(),
               String.t(),
               String.t(),
               map() | list(),
               keyword()
-            ) :: :ok | AMQP.error()
+            ) :: :ok | AMQP.Basic.error()
 end
