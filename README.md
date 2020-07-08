@@ -28,10 +28,7 @@ Create a consumer if you need to receive messages from RabbitMQ.
 
 ```elixir
 defmodule MyApp.MyConsumer do
-  use Lepus.Consumer,
-    exchange: "my_exchange",
-    routing_key: "my_routing_key"
-
+  use Lepus.Consumer
 
   @impl Lepus.Consumer
   def options do
