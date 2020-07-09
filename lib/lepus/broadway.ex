@@ -66,13 +66,20 @@ defmodule Lepus.Broadway do
       with_new_channel(rabbit_client, connection, fn channel ->
         messages
         |> Enum.map(&{&1, retry_failed_message(rabbit_client, &1, delay_exchange, channel)})
-        |> Enum.each(fn {%{data: data, metadata: metadata}, retry_number} ->
-          consumer_module.handle_failed(data, metadata, retry_number)
-        end)
+        |> call_consumer_failed_callback(consumer_module)
       end)
     end
 
     messages
+  end
+
+  defp call_consumer_failed_callback(messages_and_retries, consumer_module) do
+    if function_exported?(consumer_module, :handle_failed, 4) do
+      messages_and_retries
+      |> Enum.each(fn {%{data: data, metadata: metadata, status: status}, retry_number} ->
+        consumer_module.handle_failed(data, metadata, status, retry_number)
+      end)
+    end
   end
 
   defp retry_failed_message(

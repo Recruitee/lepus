@@ -108,7 +108,7 @@ defmodule Lepus.ConsumerTest do
     end
 
     @impl Lepus.Consumer
-    def handle_failed(data, %{test_pid: test_pid}, _retry_number) do
+    def handle_failed(data, %{test_pid: test_pid}, _status, _retry_number) do
       Process.send(test_pid, {:failed_handled, data}, [])
     end
   end
