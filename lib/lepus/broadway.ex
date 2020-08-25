@@ -46,7 +46,12 @@ defmodule Lepus.Broadway do
   @impl Broadway
   def handle_message(_, message, context) do
     %{consumer_module: consumer_module} = context
-    %{data: data, metadata: metadata} = message
+    %{data: data, metadata: rabbit_mq_metadata} = message
+
+    metadata = %{
+      rabbit_mq_metadata: rabbit_mq_metadata,
+      retries_count: get_header_value(rabbit_mq_metadata, "x-retries", 0)
+    }
 
     case consumer_module.handle_message(data, metadata) do
       :ok -> message
@@ -74,10 +79,16 @@ defmodule Lepus.Broadway do
   end
 
   defp call_consumer_failed_callback(messages_and_retries, consumer_module) do
-    if function_exported?(consumer_module, :handle_failed, 4) do
+    if function_exported?(consumer_module, :handle_failed, 2) do
       messages_and_retries
-      |> Enum.each(fn {%{data: data, metadata: metadata, status: status}, retry_number} ->
-        consumer_module.handle_failed(data, metadata, status, retry_number)
+      |> Enum.each(fn {%{data: data, metadata: rabbit_mq_metadata, status: status}, retries_count} ->
+        metadata = %{
+          rabbit_mq_metadata: rabbit_mq_metadata,
+          status: status,
+          retries_count: retries_count
+        }
+
+        consumer_module.handle_failed(data, metadata)
       end)
     end
   end
@@ -113,6 +124,10 @@ defmodule Lepus.Broadway do
     "#{expiration_sec * 1000}"
   end
 
+  defp get_header_value(%{headers: headers}, name, default) when is_list(headers) do
+    get_header_value(headers, name, default)
+  end
+
   defp get_header_value(headers, name, default) when is_list(headers) do
     headers
     |> Enum.split_with(fn
@@ -125,7 +140,7 @@ defmodule Lepus.Broadway do
     end
   end
 
-  defp get_header_value(:undefined, _, default), do: default
+  defp get_header_value(_, _, default), do: default
 
   defp update_headers(headers, tuples) when is_list(headers) do
     [tuples | headers] |> List.flatten() |> Enum.uniq_by(fn {k, _, _} -> k end)

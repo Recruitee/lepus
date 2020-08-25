@@ -40,16 +40,11 @@ defmodule Lepus.Consumer do
 
   """
 
-  @type message_status() ::
-          :ok
-          | {:failed, reason :: binary()}
-          | {:throw | :error | :exit, term(), Exception.stacktrace()}
-
   @callback options() :: Keyword.t()
   @callback handle_message(any(), map()) :: :ok | {:error, String.t()}
-  @callback handle_failed(any(), map(), message_status(), non_neg_integer()) :: any()
+  @callback handle_failed(any(), map()) :: any()
 
-  @optional_callbacks handle_failed: 4
+  @optional_callbacks handle_failed: 2
 
   alias Lepus.RabbitClient
 

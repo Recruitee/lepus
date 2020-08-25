@@ -95,7 +95,7 @@ defmodule Lepus.ConsumerTest do
     end
 
     @impl Lepus.Consumer
-    def handle_message(data, %{test_pid: test_pid}) do
+    def handle_message(data, %{rabbit_mq_metadata: %{test_pid: test_pid}}) do
       result =
         if data in ["Failed!", %{"str" => "Failed!"}] do
           {:error, "Failed!"}
@@ -108,7 +108,7 @@ defmodule Lepus.ConsumerTest do
     end
 
     @impl Lepus.Consumer
-    def handle_failed(data, %{test_pid: test_pid}, _status, _retry_number) do
+    def handle_failed(data, %{rabbit_mq_metadata: %{test_pid: test_pid}}) do
       Process.send(test_pid, {:failed_handled, data}, [])
     end
   end

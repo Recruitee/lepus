@@ -42,7 +42,7 @@ defmodule MyApp.MyConsumer do
   end
 
   @impl Lepus.Consumer
-  def handle_failed(data, metadata, status, retries_count) do
+  def handle_failed(data, metadata) do
     # do someting
   end
 end
