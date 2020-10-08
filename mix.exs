@@ -26,7 +26,8 @@ defmodule Lepus.MixProject do
 
       # Dev tools
       {:credo, "~> 1.4", only: :dev, runtime: false},
-      {:dialyxir, "~> 1.0", only: [:dev], runtime: false}
+      {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
     ]
   end
 end
