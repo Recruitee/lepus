@@ -1,4 +1,4 @@
-defmodule Lepus.Client.Connection do
+defmodule Lepus.BasicClient.Connection do
   @moduledoc false
 
   use GenServer

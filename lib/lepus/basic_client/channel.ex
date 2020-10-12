@@ -1,7 +1,7 @@
-defmodule Lepus.Client.Channel do
+defmodule Lepus.BasicClient.Channel do
   @moduledoc false
 
-  alias Lepus.Client.Connection
+  alias Lepus.BasicClient.Connection
 
   use GenServer
 

@@ -4,7 +4,7 @@ defmodule Lepus do
   Example usage:
 
       use Lepus,
-        client: Lepus.Client,
+        client: Lepus.BasicClient,
         exchanges: ["my_exchange1", "my_exchange2"]
 
   """

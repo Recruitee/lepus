@@ -1,7 +1,7 @@
 defmodule LepusTest do
   use ExUnit.Case, async: true
 
-  defmodule Client do
+  defmodule BasicClient do
     def start_link(init_arg) do
       {:start_link, [init_arg]}
     end
@@ -16,7 +16,7 @@ defmodule LepusTest do
   end
 
   defmodule CustomClient do
-    use Lepus, client: LepusTest.Client, exchanges: ["exchange1", "exchange2", ""]
+    use Lepus, client: LepusTest.BasicClient, exchanges: ["exchange1", "exchange2", ""]
   end
 
   describe ".start_link" do

@@ -1,9 +1,9 @@
-defmodule Lepus.Client.Channels do
+defmodule Lepus.BasicClient.Channels do
   @moduledoc false
 
   use Supervisor
 
-  alias Lepus.Client.Channel
+  alias Lepus.BasicClient.Channel
 
   def start_link(init_arg) do
     name = init_arg |> Keyword.fetch!(:name)
