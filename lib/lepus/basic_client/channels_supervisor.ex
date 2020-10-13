@@ -1,31 +1,30 @@
-defmodule Lepus.BasicClient.Channels do
+defmodule Lepus.BasicClient.ChannelsSupervisor do
   @moduledoc false
 
   use Supervisor
 
-  alias Lepus.BasicClient.Channel
+  alias Lepus.BasicClient.ChannelServer
+  alias Lepus.BasicClient.ServerNames
 
   def start_link(init_arg) do
-    name = init_arg |> Keyword.fetch!(:name)
+    name = init_arg |> Keyword.fetch!(:client_name) |> ServerNames.channels_supervisor()
     Supervisor.start_link(__MODULE__, init_arg, name: name)
   end
 
   @impl Supervisor
   def init(init_arg) do
+    client_name = init_arg |> Keyword.fetch!(:client_name)
     exchanges = init_arg |> Keyword.fetch!(:exchanges)
-    registry_name = init_arg |> Keyword.fetch!(:registry_name)
-    connection_name = init_arg |> Keyword.fetch!(:connection_name)
     rabbit_client = init_arg |> Keyword.fetch!(:rabbit_client)
 
     children =
       exchanges
       |> Enum.map(fn exchange ->
         Supervisor.child_spec(
-          {Channel,
-           exchange: exchange,
-           registry_name: registry_name,
-           connection_name: connection_name,
-           rabbit_client: rabbit_client},
+          {
+            ChannelServer,
+            client_name: client_name, exchange: exchange, rabbit_client: rabbit_client
+          },
           id: exchange
         )
       end)

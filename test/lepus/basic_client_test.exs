@@ -105,7 +105,9 @@ defmodule Lepus.BasicClient.ServerTest do
 
     test "publishes to rabbit and adds timestamp to opts", %{server_name: server_name} do
       server_name
-      |> BasicClient.publish("exchange1", "my_routing_key", "my_payload", my_key: "my_value")
+      |> BasicClient.publish("exchange1", "my_routing_key", "my_payload",
+        amqp_opts: [my_key: "my_value"]
+      )
 
       assert_receive {:publish,
                       [%{type: :channel}, "exchange1", "my_routing_key", "my_payload", opts]}
@@ -157,7 +159,7 @@ defmodule Lepus.BasicClient.ServerTest do
     test "publishes to rabbit and adds timestamp to opts", %{server_name: server_name} do
       server_name
       |> BasicClient.publish_json("exchange1", "my_routing_key", %{data: "my_payload"},
-        my_key: "my_value"
+        amqp_opts: [my_key: "my_value"]
       )
 
       assert_receive {:publish,

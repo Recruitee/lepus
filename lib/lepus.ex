@@ -3,10 +3,7 @@ defmodule Lepus do
   Defines a RabbitMQ client.
   Example usage:
 
-      use Lepus,
-        client: Lepus.BasicClient,
-        exchanges: ["my_exchange1", "my_exchange2"]
-
+      use Lepus, client: Lepus.BasicClient
   """
 
   @callback publish(String.t(), String.t(), String.t(), keyword()) :: :ok | AMQP.Basic.error()
@@ -20,52 +17,20 @@ defmodule Lepus do
 
   defmacro __using__(opts) do
     client = opts |> Keyword.fetch!(:client)
-    exchanges = opts |> Keyword.fetch!(:exchanges)
     name = opts |> Keyword.get(:name, __CALLER__.module())
 
     quote do
       @behaviour Lepus
 
-      def start_link(init_arg) do
-        init_arg
-        |> Keyword.take([:connection])
-        |> Keyword.put_new(:connection, unquote(Macro.escape(Keyword.get(opts, :connection))))
-        |> Keyword.put(:name, unquote(name))
-        |> Keyword.put(:exchanges, unquote(exchanges))
-        |> unquote(client).start_link()
-      end
-
-      def child_spec(init_arg) do
-        %{
-          id: __MODULE__,
-          start: {__MODULE__, :start_link, [init_arg]},
-          type: :supervisor
-        }
-      end
-
       @spec publish(String.t(), String.t(), String.t(), keyword()) :: :ok | AMQP.Basic.error()
-      def publish(exchange, routing_key, payload, options \\ [])
-
-      def publish(exchange, routing_key, payload, options)
-          when exchange in unquote(exchanges) do
+      def publish(exchange, routing_key, payload, options \\ []) do
         unquote(client).publish(unquote(name), exchange, routing_key, payload, options)
-      end
-
-      def publish(exchange, _routing_key, _payload, _options) do
-        ArgumentError |> raise(Lepus.wrong_exchange(exchange, unquote(exchanges)))
       end
 
       @spec publish_json(String.t(), String.t(), map() | list(), keyword()) ::
               :ok | AMQP.Basic.error()
-      def publish_json(exchange, routing_key, payload, options \\ [])
-
-      def publish_json(exchange, routing_key, payload, options)
-          when exchange in unquote(exchanges) do
+      def publish_json(exchange, routing_key, payload, options \\ []) do
         unquote(client).publish_json(unquote(name), exchange, routing_key, payload, options)
-      end
-
-      def publish_json(exchange, _routing_key, _payload, _options) do
-        ArgumentError |> raise(Lepus.wrong_exchange(exchange, unquote(exchanges)))
       end
     end
   end

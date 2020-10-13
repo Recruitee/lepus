@@ -1,7 +1,8 @@
-defmodule Lepus.BasicClient.Channel do
+defmodule Lepus.BasicClient.ChannelServer do
   @moduledoc false
 
-  alias Lepus.BasicClient.Connection
+  alias Lepus.BasicClient.ConnectionServer
+  alias Lepus.BasicClient.ServerNames
 
   use GenServer
 
@@ -10,25 +11,30 @@ defmodule Lepus.BasicClient.Channel do
   @timeout 1000
 
   def start_link(init_arg) do
-    GenServer.start_link(__MODULE__, init_arg, name: via_tuple(init_arg))
+    client_name = init_arg |> Keyword.fetch!(:client_name)
+    exchange = init_arg |> Keyword.fetch!(:exchange)
+    name = client_name |> ServerNames.channel_server(exchange)
+
+    GenServer.start_link(__MODULE__, init_arg, name: name)
   end
 
-  def publish(registry_name, exchange, routing_key, payload, options) do
-    via_tuple(registry_name, exchange)
-    |> GenServer.call({:publish, routing_key, payload, options})
+  def publish(client_name, exchange, routing_key, payload, amqp_opts) do
+    client_name
+    |> ServerNames.channel_server(exchange)
+    |> GenServer.call({:publish, routing_key, payload, amqp_opts})
   end
 
   @impl GenServer
   def init(init_arg) do
+    client_name = init_arg |> Keyword.fetch!(:client_name)
     exchange = init_arg |> Keyword.fetch!(:exchange)
-    connection_name = init_arg |> Keyword.fetch!(:connection_name)
     rabbit_client = init_arg |> Keyword.fetch!(:rabbit_client)
 
     {:ok,
      %{
        rabbit_client: rabbit_client,
        exchange: exchange,
-       connection_name: connection_name,
+       client_name: client_name,
        channel: nil
      }, {:continue, :open_channel_first}}
   end
@@ -36,10 +42,9 @@ defmodule Lepus.BasicClient.Channel do
   @impl GenServer
   def handle_continue(
         :open_channel_first,
-        %{rabbit_client: rabbit_client, exchange: exchange, connection_name: connection_name} =
-          state
+        %{rabbit_client: rabbit_client, exchange: exchange, client_name: client_name} = state
       ) do
-    channel = open_channel(rabbit_client, connection_name)
+    channel = open_channel(rabbit_client, client_name)
     rabbit_client.declare_direct_exchange(channel, exchange, durable: true)
 
     {:noreply, %{state | channel: channel}}
@@ -47,20 +52,20 @@ defmodule Lepus.BasicClient.Channel do
 
   @impl GenServer
   def handle_call(
-        {:publish, routing_key, payload, options},
+        {:publish, routing_key, payload, amqp_opts},
         _ref,
         %{rabbit_client: rabbit_client, exchange: exchange, channel: channel} = state
       ) do
-    result = rabbit_client.publish(channel, exchange, routing_key, payload, options)
+    result = rabbit_client.publish(channel, exchange, routing_key, payload, amqp_opts)
     {:reply, result, state}
   end
 
   @impl GenServer
   def handle_info(
         :open_channel,
-        %{rabbit_client: rabbit_client, connection_name: connection_name} = state
+        %{rabbit_client: rabbit_client, client_name: client_name} = state
       ) do
-    {:noreply, %{state | channel: open_channel(rabbit_client, connection_name)}}
+    {:noreply, %{state | channel: open_channel(rabbit_client, client_name)}}
   end
 
   @impl GenServer
@@ -77,9 +82,10 @@ defmodule Lepus.BasicClient.Channel do
   @impl GenServer
   def terminate(_reason, _state), do: nil
 
-  defp open_channel(rabbit_client, connection_name) do
-    connection_name
-    |> Connection.get_conn()
+  defp open_channel(rabbit_client, client_name) do
+    client_name
+    |> ServerNames.connection_server()
+    |> ConnectionServer.get_conn()
     |> rabbit_client.open_channel()
     |> case do
       {:ok, channel} ->
@@ -91,15 +97,5 @@ defmodule Lepus.BasicClient.Channel do
         Logger.error("Connecting to channel failed: #{inspect(err)}")
         nil
     end
-  end
-
-  defp via_tuple(keyword) when is_list(keyword) do
-    registry_name = keyword |> Keyword.fetch!(:registry_name)
-    exchange = keyword |> Keyword.fetch!(:exchange)
-    via_tuple(registry_name, exchange)
-  end
-
-  defp via_tuple(registry_name, exchange) do
-    {:via, Registry, {registry_name, exchange}}
   end
 end

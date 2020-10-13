@@ -1,5 +1,7 @@
-defmodule Lepus.BasicClient.Connection do
+defmodule Lepus.BasicClient.ConnectionServer do
   @moduledoc false
+
+  alias Lepus.BasicClient.ServerNames
 
   use GenServer
 
@@ -8,7 +10,7 @@ defmodule Lepus.BasicClient.Connection do
   @timeout 1000
 
   def start_link(init_arg) do
-    name = init_arg |> Keyword.fetch!(:name)
+    name = init_arg |> Keyword.fetch!(:client_name) |> ServerNames.connection_server()
     GenServer.start_link(__MODULE__, init_arg, name: name)
   end
 
