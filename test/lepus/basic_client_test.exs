@@ -97,7 +97,7 @@ defmodule Lepus.BasicClient.ServerTest do
           name: server_name,
           connection: connection,
           rabbit_client: RabbitClientMock,
-          exchanges: ["exchange1", "exchange2", ""]
+          exchanges: ["exchange1", "exchange2"]
         )
 
       {:ok, server_name: server_name}

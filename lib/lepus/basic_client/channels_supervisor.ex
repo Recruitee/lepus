@@ -18,7 +18,8 @@ defmodule Lepus.BasicClient.ChannelsSupervisor do
     rabbit_client = init_arg |> Keyword.fetch!(:rabbit_client)
 
     children =
-      exchanges
+      ["" | exchanges]
+      |> Enum.uniq()
       |> Enum.map(fn exchange ->
         Supervisor.child_spec(
           {
