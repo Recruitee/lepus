@@ -38,11 +38,13 @@ defmodule Lepus.ConsumerTest do
       pid |> log(:publish, [channel, exchange, routing_key, payload, opts])
     end
 
+    def get_log(pid), do: pid |> Agent.get(& &1) |> Enum.reverse()
+
+    def clear(pid), do: pid |> Agent.update(fn _ -> [] end)
+
     defp log(pid, name, args) do
       pid |> Agent.update(fn state -> [{name, args} | state] end)
     end
-
-    def get_log(pid), do: pid |> Agent.get(& &1) |> Enum.reverse()
   end
 
   defmodule BroadwayProducerMock do
@@ -95,21 +97,24 @@ defmodule Lepus.ConsumerTest do
     end
 
     @impl Lepus.Consumer
-    def handle_message(data, %{rabbit_mq_metadata: %{test_pid: test_pid}}) do
-      result =
-        if data in ["Failed!", %{"str" => "Failed!"}] do
-          {:error, "Failed!"}
-        else
-          :ok
-        end
+    def handle_message(data, %{rabbit_mq_metadata: %{test_pid: test_pid}} = metadata) do
+      Process.send(test_pid, {:message_handled, data, metadata}, [])
 
-      Process.send(test_pid, {:message_handled, data}, [])
-      result
+      data
+      |> case do
+        "Failed!" -> {:error, "Failed!"}
+        %{"str" => "Failed!"} -> {:error, %{"error" => "Failed!"}}
+        "With response" -> {:ok, "Response"}
+        %{"str" => "With response"} -> {:ok, %{"str" => "Response"}}
+        "Raised!" -> raise ArgumentError, "Test Argument Error!"
+        %{"str" => "Raised!"} -> raise ArgumentError, "Test Argument Error!"
+        _ -> {:ok, ""}
+      end
     end
 
     @impl Lepus.Consumer
-    def handle_failed(data, %{rabbit_mq_metadata: %{test_pid: test_pid}}) do
-      Process.send(test_pid, {:failed_handled, data}, [])
+    def handle_failed(data, %{rabbit_mq_metadata: %{test_pid: test_pid}} = metadata) do
+      Process.send(test_pid, {:failed_handled, data, metadata}, [])
     end
   end
 
@@ -178,8 +183,6 @@ defmodule Lepus.ConsumerTest do
 
       producer_opts = broadway_opts |> Keyword.fetch!(:producer)
 
-      assert producer_opts |> Keyword.fetch!(:transformer) == {Lepus.Broadway, :transform, []}
-
       assert {BroadwayProducerMock, producer_module_opts} =
                producer_opts |> Keyword.fetch!(:module)
 
@@ -188,9 +191,11 @@ defmodule Lepus.ConsumerTest do
       assert producer_module_opts |> Keyword.fetch!(:queue) == "test_exchange.test_routing_key"
 
       assert producer_module_opts |> Keyword.fetch!(:metadata) == [
-               :headers,
-               :routing_key,
                :content_type,
+               :correlation_id,
+               :headers,
+               :reply_to,
+               :routing_key,
                :timestamp
              ]
     end
@@ -201,31 +206,342 @@ defmodule Lepus.ConsumerTest do
       {:ok, rabbit_client} = RabbitClientMock.start_link()
       {:ok, consumer} = Consumer.start_link(connection: rabbit_client, name: new_consumer_name())
       [producer] = consumer |> Broadway.producer_names()
+      rabbit_client |> RabbitClientMock.clear()
 
-      {:ok, producer: producer}
+      {:ok, producer: producer, rabbit_client: rabbit_client}
     end
 
     test "handles message", %{producer: producer} do
       producer |> BroadwayProducerMock.push_message("Hello!")
-      assert_receive {:message_handled, "Hello!"}
+
+      assert_receive {:message_handled, "Hello!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false, client: nil}}
+
+      assert_receive {:successful, %{data: "Hello!"}}
+    end
+
+    test "handles message with x-client header", %{producer: producer} do
+      producer
+      |> BroadwayProducerMock.push_message("Hello!", %{
+        headers: [{"x-client", :binary, "test_client"}]
+      })
+
+      assert_receive {:message_handled, "Hello!",
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 0,
+                        sync: false,
+                        client: "test_client"
+                      }}
+
       assert_receive {:successful, %{data: "Hello!"}}
     end
 
     test "handles JSON message", %{producer: producer} do
+      payload = ~s({"str":"value","int":1})
+
       producer
       |> BroadwayProducerMock.push_message(~s({"str":"value","int":1}), %{
         content_type: "application/json"
       })
 
-      parsed_data = %{"str" => "value", "int" => 1}
+      assert_receive {:message_handled, %{"str" => "value", "int" => 1},
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false}}
 
-      assert_receive {:message_handled, ^parsed_data}
-      assert_receive {:successful, %{data: ^parsed_data}}
+      assert_receive {:successful, %{data: ^payload}}
     end
 
-    test "reschedules failed message", %{producer: producer} do
-      {:ok, rabbit_client} = RabbitClientMock.start_link()
+    test "handles sync message", %{producer: producer, rabbit_client: rabbit_client} do
+      producer
+      |> BroadwayProducerMock.push_message(
+        "Hello!",
+        %{
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id"
+        },
+        rabbit_client
+      )
 
+      assert_receive {:message_handled, "Hello!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:successful, %{data: "Hello!"}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", "", options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "ok"}]
+    end
+
+    test "handles sync message with x-reply-timeout header", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      producer
+      |> BroadwayProducerMock.push_message(
+        "Hello!",
+        %{
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id",
+          headers: [{"x-reply-timeout", :long, 10_000}]
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, "Hello!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:successful, %{data: "Hello!"}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", "", options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:expiration) == 10_000
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "ok"}]
+    end
+
+    test "handles sync message with response", %{producer: producer, rabbit_client: rabbit_client} do
+      producer
+      |> BroadwayProducerMock.push_message(
+        "With response",
+        %{
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, "With response",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:successful, %{data: "With response"}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", "Response", options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "ok"}]
+    end
+
+    test "handles sync message with error response", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      producer
+      |> BroadwayProducerMock.push_message(
+        "Failed!",
+        %{
+          routing_key: "my_routing_key",
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, "Failed!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:failed, %{data: "Failed!"}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", "Failed!", options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "error"}]
+    end
+
+    test "handles sync message with raised exception", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      payload = "Raised!"
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{
+          routing_key: "my_routing_key",
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, ^payload,
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:failed, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [
+                 channel,
+                 "",
+                 "my_reply_to",
+                 ~s(%ArgumentError{message: "Test Argument Error!"}),
+                 options
+               ],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "error"}]
+    end
+
+    test "handles sync JSON message", %{producer: producer, rabbit_client: rabbit_client} do
+      payload = ~s({"str":"value","int":1})
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id",
+          content_type: "application/json"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, %{"int" => 1, "str" => "value"},
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:successful, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", ~s(""), options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "ok"}]
+      assert options |> Keyword.fetch!(:content_type) == "application/json"
+    end
+
+    test "handles sync JSON message with response", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      payload = ~s({"str":"With response"})
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id",
+          content_type: "application/json"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, %{"str" => "With response"},
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:successful, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", ~s({"str":"Response"}), options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "ok"}]
+      assert options |> Keyword.fetch!(:content_type) == "application/json"
+    end
+
+    test "handles sync JSON message with error response", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      payload = ~s({"str":"Failed!"})
+      parsed_payload = %{"str" => "Failed!"}
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{
+          routing_key: "my_routing_key",
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id",
+          content_type: "application/json"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, ^parsed_payload,
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:failed, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "", "my_reply_to", ~s({"error":"Failed!"}), options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "error"}]
+      assert options |> Keyword.fetch!(:content_type) == "application/json"
+    end
+
+    test "handles sync JSON message with raised exception", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      payload = ~s({"str": "Raised!"})
+      parsed_payload = %{"str" => "Raised!"}
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{
+          routing_key: "my_routing_key",
+          reply_to: "my_reply_to",
+          correlation_id: "my_correlation_id",
+          content_type: "application/json"
+        },
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, ^parsed_payload,
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: true}}
+
+      assert_receive {:failed, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [
+                 channel,
+                 "",
+                 "my_reply_to",
+                 ~s("%ArgumentError{message: \\"Test Argument Error!\\"}"),
+                 options
+               ],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:correlation_id) == "my_correlation_id"
+      assert options |> Keyword.fetch!(:headers) == [{"x-reply-status", :binary, "error"}]
+      assert options |> Keyword.fetch!(:content_type) == "application/json"
+    end
+
+    test "reschedules failed message", %{producer: producer, rabbit_client: rabbit_client} do
       producer
       |> BroadwayProducerMock.push_message(
         "Failed!",
@@ -233,8 +549,17 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, "Failed!"}
-      assert_receive {:failed_handled, "Failed!"}
+      assert_receive {:message_handled, "Failed!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false}}
+
+      assert_receive {:failed_handled, "Failed!",
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 1,
+                        status: {:failed, "Failed!"},
+                        sync: false
+                      }}
+
       assert_receive {:failed, %{data: "Failed!"}}
 
       assert [
@@ -248,10 +573,9 @@ defmodule Lepus.ConsumerTest do
       assert options |> Keyword.fetch!(:routing_key) == "my_routing_key"
     end
 
-    test "reschedules failed JSON message", %{producer: producer} do
-      {:ok, rabbit_client} = RabbitClientMock.start_link()
-
+    test "reschedules failed JSON message", %{producer: producer, rabbit_client: rabbit_client} do
       payload = ~s({"str":"Failed!"})
+      parsed_payload = %{"str" => "Failed!"}
 
       producer
       |> BroadwayProducerMock.push_message(
@@ -260,9 +584,18 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, %{"str" => "Failed!"}}
-      assert_receive {:failed_handled, %{"str" => "Failed!"}}
-      assert_receive {:failed, %{data: %{"str" => "Failed!"}}}
+      assert_receive {:message_handled, ^parsed_payload,
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false}}
+
+      assert_receive {:failed_handled, ^parsed_payload,
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 1,
+                        status: {:failed, %{"error" => "Failed!"}},
+                        sync: false
+                      }}
+
+      assert_receive {:failed, %{data: ^payload}}
 
       assert [
                open_channel: _connection,
@@ -275,9 +608,10 @@ defmodule Lepus.ConsumerTest do
       assert options |> Keyword.fetch!(:routing_key) == "my_routing_key"
     end
 
-    test "reschedules failed message using exp backoff", %{producer: producer} do
-      {:ok, rabbit_client} = RabbitClientMock.start_link()
-
+    test "reschedules failed message using exp backoff", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
       producer
       |> BroadwayProducerMock.push_message(
         "Failed!",
@@ -285,8 +619,17 @@ defmodule Lepus.ConsumerTest do
         rabbit_client
       )
 
-      assert_receive {:message_handled, "Failed!"}
-      assert_receive {:failed_handled, "Failed!"}
+      assert_receive {:message_handled, "Failed!",
+                      %{rabbit_mq_metadata: _, retries_count: 3, sync: false}}
+
+      assert_receive {:failed_handled, "Failed!",
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 4,
+                        status: {:failed, "Failed!"},
+                        sync: false
+                      }}
+
       assert_receive {:failed, %{data: "Failed!"}}
 
       assert [
@@ -297,6 +640,43 @@ defmodule Lepus.ConsumerTest do
 
       assert options |> Keyword.fetch!(:expiration) == "16000"
       assert options |> Keyword.fetch!(:headers) == [{"x-retries", :long, 4}]
+      assert options |> Keyword.fetch!(:routing_key) == "my_routing_key"
+    end
+
+    test "reschedules failed message after raising exception", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      payload = "Raised!"
+
+      producer
+      |> BroadwayProducerMock.push_message(
+        payload,
+        %{routing_key: "my_routing_key"},
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, ^payload,
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false}}
+
+      assert_receive {:failed_handled, ^payload,
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 1,
+                        status: {:error, %ArgumentError{message: "Test Argument Error!"}, _},
+                        sync: false
+                      }}
+
+      assert_receive {:failed, %{data: ^payload}}
+
+      assert [
+               open_channel: _connection,
+               publish: [channel, "test_exchange.delay", "my_routing_key", ^payload, options],
+               close_channel: [channel]
+             ] = RabbitClientMock.get_log(rabbit_client)
+
+      assert options |> Keyword.fetch!(:expiration) == "2000"
+      assert options |> Keyword.fetch!(:headers) == [{"x-retries", :long, 1}]
       assert options |> Keyword.fetch!(:routing_key) == "my_routing_key"
     end
   end

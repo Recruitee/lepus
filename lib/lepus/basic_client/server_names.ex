@@ -10,8 +10,14 @@ defmodule Lepus.BasicClient.ServerNames do
   @spec registry(atom) :: atom
   def registry(client_name), do: :"#{client_name}.Registry"
 
+  @spec store(atom) :: atom
+  def store(client_name), do: :"#{client_name}.Store"
+
   @spec channel_server(atom, binary) :: {atom, atom, any}
   def channel_server(client_name, exchange) do
     {:via, Registry, {registry(client_name), exchange}}
   end
+
+  @spec replies_broadway(atom) :: atom
+  def replies_broadway(client_name), do: :"#{client_name}.RepliesBroadway"
 end

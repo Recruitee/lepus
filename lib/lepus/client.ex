@@ -11,5 +11,5 @@ defmodule Lepus.Client do
               String.t(),
               map() | list(),
               keyword()
-            ) :: :ok | AMQP.Basic.error()
+            ) :: :ok | AMQP.Basic.error() | {:error, :timeout}
 end

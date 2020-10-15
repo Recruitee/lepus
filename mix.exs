@@ -23,6 +23,7 @@ defmodule Lepus.MixProject do
     [
       {:broadway_rabbitmq, "~> 0.6.0"},
       {:jason, "~> 1.0"},
+      {:phoenix_pubsub, ">= 1.0.0"},
 
       # Dev tools
       {:credo, "~> 1.4", only: :dev, runtime: false},

@@ -36,9 +36,14 @@ defmodule MyApp.MyConsumer do
   end
 
   @impl Lepus.Consumer
+  def handle_message(data, %{sync: true} = metadata) do
+    # do someting
+    {:ok, response} # or `{:error, error}`
+  end
+
   def handle_message(data, metadata) do
     # do someting
-    :ok
+    :ok # or `:error` or `{:error, error}`
   end
 
   @impl Lepus.Consumer
@@ -66,10 +71,8 @@ Supervisor.init(children, strategy: :one_for_one)
 Create a client if you need to send messages to RabbitMQ.
 
 ```elixir
-defmodule MyApp.MyRabbitMQClient do
-  use Lepus,
-    client: Lepus.BasicClient,
-    exchanges: ["my_exchange1", "my_exchange2"]
+defmodule MyApp.RabbitMQ do
+  use Lepus, client: Lepus.BasicClient
 end
 ```
 
@@ -79,7 +82,17 @@ children = [
   # ...
   # `connection` is a keyword or URI from AMQP
   # https://hexdocs.pm/amqp/AMQP.Connection.html#open/2
-  {MyApp.MyRabbitMQClient, connection: rabbit_connection},
+  {
+    Lepus.BasicClient
+    name: MyApp.RabbitMQ
+    connection: rabbit_connection
+    exchanges: ["my_exchange1", "my_exchange2"],
+    # if you wand use `sync: true` option
+    sync_opts: [
+        pubsub: MyApp.PubSub
+        reply_to_queue: "my_app.reply_to"
+    ]
+  },
   # ...
 ]
 
@@ -101,5 +114,15 @@ MyApp.MyRabbitMQClient.publish_json(
     key: "Value",
     list: [1, 2, 3]
   }
+)
+
+MyApp.MyRabbitMQClient.publish_json(
+  "my_exchange2",
+  "my_routing_key",
+  %{
+    key: "Value",
+    list: [1, 2, 3]
+  },
+  sync: true
 )
 ```
