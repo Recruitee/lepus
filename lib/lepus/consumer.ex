@@ -98,7 +98,7 @@ defmodule Lepus.Consumer do
   defp build_private_data(static_opts, dynamic_opts) do
     %{
       broadway_producer_module:
-        get_opt(static_opts, dynamic_opts, :broadway_producer_module, BroadwayRabbitMQ.Client),
+        get_opt(static_opts, dynamic_opts, :broadway_producer_module, BroadwayRabbitMQ.Producer),
       rabbit_client: get_opt(static_opts, dynamic_opts, :rabbit_client, RabbitClient),
       name: get_opt(static_opts, dynamic_opts, :name, nil)
     }
