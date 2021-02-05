@@ -82,7 +82,7 @@ defmodule Lepus.ConsumerTest do
     def handle_cast({:push_message, message}, init_arg), do: {:noreply, [message], init_arg}
   end
 
-  defmodule Consumer do
+  defmodule RetriableConsumer do
     use Lepus.Consumer
 
     @impl Lepus.Consumer
@@ -118,10 +118,27 @@ defmodule Lepus.ConsumerTest do
     end
   end
 
+  defmodule NotRetriableConsumer do
+    use Lepus.Consumer
+
+    @impl Lepus.Consumer
+    def options, do: RetriableConsumer.options() |> Keyword.put(:retriable, false)
+
+    @impl Lepus.Consumer
+    def handle_message(data, metadata), do: RetriableConsumer.handle_message(data, metadata)
+
+    @impl Lepus.Consumer
+    def handle_failed(data, metadata), do: RetriableConsumer.handle_failed(data, metadata)
+  end
+
   describe ".start_link/1" do
-    setup do
+    setup tag do
       {:ok, rabbit_client} = RabbitClientMock.start_link()
-      {:ok, consumer} = Consumer.start_link(connection: rabbit_client, name: new_consumer_name())
+      consumer_module = tag |> Map.get(:consumer_module, RetriableConsumer)
+
+      {:ok, consumer} =
+        consumer_module.start_link(connection: rabbit_client, name: new_consumer_name())
+
       log = rabbit_client |> RabbitClientMock.get_log()
 
       {:ok, log: log, rabbit_client: rabbit_client, consumer: consumer}
@@ -166,6 +183,27 @@ defmodule Lepus.ConsumerTest do
              ] = log
     end
 
+    @tag consumer_module: NotRetriableConsumer
+    test "declares exchanges and queues for NotRetriableConsumer", %{
+      log: log,
+      rabbit_client: rabbit_client
+    } do
+      assert [
+               open_connection: [^rabbit_client],
+               open_channel: [connection],
+               declare_direct_exchange: [channel, "test_exchange", [durable: true]],
+               declare_queue: [channel, "test_exchange.test_routing_key", [durable: true]],
+               bind_queue: [
+                 channel,
+                 "test_exchange.test_routing_key",
+                 "test_exchange",
+                 [routing_key: "test_routing_key"]
+               ],
+               close_channel: [channel],
+               close_connection: [connection]
+             ] = log
+    end
+
     test "starts broadway with proper options", %{
       consumer: consumer,
       rabbit_client: rabbit_client
@@ -202,9 +240,13 @@ defmodule Lepus.ConsumerTest do
   end
 
   describe ".handle_message/3" do
-    setup do
+    setup tag do
       {:ok, rabbit_client} = RabbitClientMock.start_link()
-      {:ok, consumer} = Consumer.start_link(connection: rabbit_client, name: new_consumer_name())
+      consumer_module = tag |> Map.get(:consumer_module, RetriableConsumer)
+
+      {:ok, consumer} =
+        consumer_module.start_link(connection: rabbit_client, name: new_consumer_name())
+
       [producer] = consumer |> Broadway.producer_names()
       rabbit_client |> RabbitClientMock.clear()
 
@@ -555,7 +597,7 @@ defmodule Lepus.ConsumerTest do
       assert_receive {:failed_handled, "Failed!",
                       %{
                         rabbit_mq_metadata: _,
-                        retries_count: 1,
+                        retries_count: 0,
                         status: {:failed, "Failed!"},
                         sync: false
                       }}
@@ -590,7 +632,7 @@ defmodule Lepus.ConsumerTest do
       assert_receive {:failed_handled, ^parsed_payload,
                       %{
                         rabbit_mq_metadata: _,
-                        retries_count: 1,
+                        retries_count: 0,
                         status: {:failed, %{"error" => "Failed!"}},
                         sync: false
                       }}
@@ -625,7 +667,7 @@ defmodule Lepus.ConsumerTest do
       assert_receive {:failed_handled, "Failed!",
                       %{
                         rabbit_mq_metadata: _,
-                        retries_count: 4,
+                        retries_count: 3,
                         status: {:failed, "Failed!"},
                         sync: false
                       }}
@@ -662,7 +704,7 @@ defmodule Lepus.ConsumerTest do
       assert_receive {:failed_handled, ^payload,
                       %{
                         rabbit_mq_metadata: _,
-                        retries_count: 1,
+                        retries_count: 0,
                         status: {:error, %ArgumentError{message: "Test Argument Error!"}, _},
                         sync: false
                       }}
@@ -678,6 +720,34 @@ defmodule Lepus.ConsumerTest do
       assert options |> Keyword.fetch!(:expiration) == "2000"
       assert options |> Keyword.fetch!(:headers) == [{"x-retries", :long, 1}]
       assert options |> Keyword.fetch!(:routing_key) == "my_routing_key"
+    end
+
+    @tag consumer_module: NotRetriableConsumer
+    test "doesn't reschedule failed message for NotRetriableConsumer", %{
+      producer: producer,
+      rabbit_client: rabbit_client
+    } do
+      producer
+      |> BroadwayProducerMock.push_message(
+        "Failed!",
+        %{routing_key: "my_routing_key"},
+        rabbit_client
+      )
+
+      assert_receive {:message_handled, "Failed!",
+                      %{rabbit_mq_metadata: _, retries_count: 0, sync: false}}
+
+      assert_receive {:failed_handled, "Failed!",
+                      %{
+                        rabbit_mq_metadata: _,
+                        retries_count: 0,
+                        status: {:failed, "Failed!"},
+                        sync: false
+                      }}
+
+      assert_receive {:failed, %{data: "Failed!"}}
+
+      assert [] = RabbitClientMock.get_log(rabbit_client)
     end
   end
 

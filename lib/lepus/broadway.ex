@@ -39,6 +39,7 @@ defmodule Lepus.Broadway do
       ],
       processors: [default: processor_opts],
       context: %{
+        retriable: strategy_data.retriable,
         rabbit_client: rabbit_client,
         delay_exchange: strategy_data.delay_exchange,
         consumer_module: consumer_module
@@ -66,17 +67,27 @@ defmodule Lepus.Broadway do
   @impl Broadway
   def handle_failed(messages, context) do
     {sync_messages, async_messages} = messages |> Enum.split_with(&sync_message?/1)
-
-    context.rabbit_client
-    |> with_new_channel(get_connection(messages), fn channel ->
-      sync_messages |> Enum.each(&publish_error(&1, channel, context))
-
-      async_messages
-      |> Enum.map(&{&1, retry_failed_message(&1, channel, context)})
-      |> call_consumer_failed_callback(context)
-    end)
+    maybe_publish_errors_and_retry(sync_messages, async_messages, context)
+    call_consumer_failed_callback(messages, context)
 
     messages
+  end
+
+  defp maybe_publish_errors_and_retry([], _, %{retriable: false}), do: :ok
+
+  defp maybe_publish_errors_and_retry(sync_messages, _, %{retriable: false} = context) do
+    context.rabbit_client
+    |> with_new_channel(get_connection(sync_messages), fn channel ->
+      sync_messages |> Enum.each(&publish_error(&1, channel, context))
+    end)
+  end
+
+  defp maybe_publish_errors_and_retry(sync_messages, async_messages, context) do
+    context.rabbit_client
+    |> with_new_channel(get_connection(sync_messages, async_messages), fn channel ->
+      sync_messages |> Enum.each(&publish_error(&1, channel, context))
+      async_messages |> Enum.each(&retry_failed_message(&1, channel, context))
+    end)
   end
 
   defp handle_by_consumer(message, context) do
@@ -138,18 +149,18 @@ defmodule Lepus.Broadway do
     channel |> rabbit_client.publish("", reply_to, response, opts)
   end
 
-  defp call_consumer_failed_callback(messages_and_retries, context) do
+  defp call_consumer_failed_callback(messages, context) do
     %{consumer_module: consumer_module} = context
 
     if function_exported?(consumer_module, :handle_failed, 2) do
-      messages_and_retries
-      |> Enum.each(fn {message, retries_count} ->
+      messages
+      |> Enum.each(fn message ->
         %{data: payload, status: status} = message |> BroadwayHelpers.maybe_decode_json()
 
         consumer_metadata =
           build_consumer_metadata(message)
           |> Map.put(:status, status)
-          |> Map.put(:retries_count, retries_count)
+          |> Map.put(:retries_count, get_retries_count(message))
 
         consumer_module.handle_failed(payload, consumer_metadata)
       end)
@@ -159,23 +170,21 @@ defmodule Lepus.Broadway do
   defp retry_failed_message(message, channel, context) do
     %{
       data: payload,
-      metadata: %{headers: headers, routing_key: routing_key} = meta
+      metadata: %{headers: headers, routing_key: routing_key} = metadata
     } = message
 
     %{rabbit_client: rabbit_client, delay_exchange: delay_exchange} = context
-    retry_number = BroadwayHelpers.get_header_value(headers, "x-retries", 0) + 1
-    new_headers = headers |> BroadwayHelpers.update_headers([{"x-retries", :long, retry_number}])
+    retries_count = get_retries_count(headers) + 1
+    new_headers = headers |> BroadwayHelpers.update_headers([{"x-retries", :long, retries_count}])
 
     opts =
-      meta
+      metadata
       |> Map.put(:headers, new_headers)
-      |> Map.put(:expiration, expiration_prop(retry_number))
+      |> Map.put(:expiration, expiration_prop(retries_count))
       |> Map.drop([:reply_to, :correlation_id])
       |> Map.to_list()
 
     rabbit_client.publish(channel, delay_exchange, routing_key, payload, opts)
-
-    retry_number
   end
 
   defp expiration_prop(retry_number) do
@@ -183,14 +192,26 @@ defmodule Lepus.Broadway do
     "#{expiration_sec * 1000}"
   end
 
-  defp declare_strategy(rabbit_client, connection_opts, %{
-         exchange: exchange,
-         routing_key: routing_key,
-         delay_exchange: delay_exchange,
-         retry_exchange: retry_exchange,
-         queue: queue,
-         retry_queue: retry_queue
-       }) do
+  defp declare_strategy(rabbit_client, connection_opts, %{retriable: false} = strategy_data) do
+    %{exchange: exchange, routing_key: routing_key, queue: queue} = strategy_data
+
+    with_new_connection(rabbit_client, connection_opts, fn channel ->
+      rabbit_client.declare_direct_exchange(channel, exchange, durable: true)
+      rabbit_client.declare_queue(channel, queue, durable: true)
+      rabbit_client.bind_queue(channel, queue, exchange, routing_key: routing_key)
+    end)
+  end
+
+  defp declare_strategy(rabbit_client, connection_opts, strategy_data) do
+    %{
+      exchange: exchange,
+      routing_key: routing_key,
+      delay_exchange: delay_exchange,
+      retry_exchange: retry_exchange,
+      queue: queue,
+      retry_queue: retry_queue
+    } = strategy_data
+
     with_new_connection(rabbit_client, connection_opts, fn channel ->
       [exchange, delay_exchange, retry_exchange]
       |> Enum.each(&rabbit_client.declare_direct_exchange(channel, &1, durable: true))
@@ -234,8 +255,14 @@ defmodule Lepus.Broadway do
 
   defp get_connection(%{acknowledger: {_, %{conn: connection}, _}}), do: connection
   defp get_connection([message | _]), do: get_connection(message)
+  defp get_connection([message | _], _), do: get_connection(message)
+  defp get_connection(_, [message | _]), do: get_connection(message)
 
   defp get_content_type(%{metadata: %{content_type: content_type}}), do: content_type
+
+  defp get_retries_count(message_or_metadata_or_headers) do
+    message_or_metadata_or_headers |> BroadwayHelpers.get_header_value("x-retries", 0)
+  end
 
   defp build_consumer_metadata(message) do
     %{metadata: rabbit_mq_metadata} = message
@@ -243,7 +270,7 @@ defmodule Lepus.Broadway do
     %{
       sync: sync_message?(message),
       rabbit_mq_metadata: rabbit_mq_metadata,
-      retries_count: BroadwayHelpers.get_header_value(rabbit_mq_metadata, "x-retries", 0),
+      retries_count: get_retries_count(rabbit_mq_metadata),
       client: BroadwayHelpers.get_header_value(rabbit_mq_metadata, "x-client", nil)
     }
   end

@@ -48,7 +48,7 @@ defmodule Lepus.BasicClient.ServerTest do
 
   describe ".start_link/1" do
     test "starts connection, channels and declares exchanges", %{connection: connection} do
-      assert {:ok, server} =
+      assert {:ok, _server} =
                BasicClient.start_link(
                  name: new_server_name(),
                  connection: connection,
@@ -423,7 +423,7 @@ defmodule Lepus.BasicClient.ServerTest do
       assert "my_value" = Keyword.fetch!(opts, :my_key)
       assert _ = Keyword.fetch!(opts, :timestamp)
       assert ^reply_to_queue = Keyword.fetch!(opts, :reply_to)
-      assert correlation_id = Keyword.fetch!(opts, :correlation_id)
+      assert Keyword.fetch!(opts, :correlation_id)
 
       assert [{"x-client", :binary, "lepus"}, {"x-reply-timeout", :long, 1000}] =
                opts |> Keyword.fetch!(:headers) |> Enum.sort()
@@ -461,7 +461,7 @@ defmodule Lepus.BasicClient.ServerTest do
       assert "my_value" = Keyword.fetch!(opts, :my_key)
       assert _ = Keyword.fetch!(opts, :timestamp)
       assert ^reply_to_queue = Keyword.fetch!(opts, :reply_to)
-      assert correlation_id = Keyword.fetch!(opts, :correlation_id)
+      assert Keyword.fetch!(opts, :correlation_id)
 
       assert [{"x-client", :binary, "lepus"}, {"x-reply-timeout", :long, 1000}] =
                opts |> Keyword.fetch!(:headers) |> Enum.sort()

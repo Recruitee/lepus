@@ -28,6 +28,7 @@ defmodule Lepus.Consumer do
       See `AMQP.Connection.open/1` for the full list of options.
     * `:exchange` - Required. RabbitMQ exchange name.
     * `:routing_key` - Required. RabbitMQ routing key name.
+    * `:retriable` - Optional. Default is `true`. Doesn't retry failed messages if is `false`.
     * `:delay_exchange` - Optional. Redefines delay exchange name.
       Default value is `"my_exchange.delay"`
     * `:retry_exchange` - Optional. Redefines retry exchange name.
@@ -83,6 +84,7 @@ defmodule Lepus.Consumer do
     routing_key = fetch_opt!(static_opts, dynamic_opts, :routing_key)
 
     %{
+      retriable: get_opt(static_opts, dynamic_opts, :retriable, true),
       exchange: exchange,
       routing_key: routing_key,
       delay_exchange:
