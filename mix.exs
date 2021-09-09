@@ -21,7 +21,7 @@ defmodule Lepus.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:broadway_rabbitmq, "~> 0.6.0"},
+      {:broadway_rabbitmq, "~> 0.7"},
       {:jason, "~> 1.0"},
       {:phoenix_pubsub, ">= 1.0.0"},
 

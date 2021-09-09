@@ -135,13 +135,11 @@ defmodule Lepus.ConsumerTest do
     setup tag do
       {:ok, rabbit_client} = RabbitClientMock.start_link()
       consumer_module = tag |> Map.get(:consumer_module, RetriableConsumer)
-
-      {:ok, consumer} =
-        consumer_module.start_link(connection: rabbit_client, name: new_consumer_name())
-
+      consumer_name = new_consumer_name()
+      {:ok, _} = consumer_module.start_link(connection: rabbit_client, name: consumer_name)
       log = rabbit_client |> RabbitClientMock.get_log()
 
-      {:ok, log: log, rabbit_client: rabbit_client, consumer: consumer}
+      {:ok, log: log, rabbit_client: rabbit_client, consumer_name: consumer_name}
     end
 
     test "declares exchanges and queues", %{log: log, rabbit_client: rabbit_client} do
@@ -205,11 +203,11 @@ defmodule Lepus.ConsumerTest do
     end
 
     test "starts broadway with proper options", %{
-      consumer: consumer,
+      consumer_name: consumer_name,
       rabbit_client: rabbit_client
     } do
       broadway_opts =
-        consumer
+        consumer_name
         |> Broadway.producer_names()
         |> List.first()
         |> GenStage.call(:get_state)
@@ -243,11 +241,9 @@ defmodule Lepus.ConsumerTest do
     setup tag do
       {:ok, rabbit_client} = RabbitClientMock.start_link()
       consumer_module = tag |> Map.get(:consumer_module, RetriableConsumer)
-
-      {:ok, consumer} =
-        consumer_module.start_link(connection: rabbit_client, name: new_consumer_name())
-
-      [producer] = consumer |> Broadway.producer_names()
+      consumer_name = new_consumer_name()
+      {:ok, _} = consumer_module.start_link(connection: rabbit_client, name: consumer_name)
+      [producer] = consumer_name |> Broadway.producer_names()
       rabbit_client |> RabbitClientMock.clear()
 
       {:ok, producer: producer, rabbit_client: rabbit_client}
