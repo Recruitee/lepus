@@ -1,11 +1,41 @@
 defmodule Lepus.Consumer do
+  alias Lepus.Consumer.{Options, Server}
+
   @moduledoc """
-  Defines a consumer.
-  Usage
+  Consumer receives messages from a RabbitMQ queue.
+  It uses `Broadway` and `BroadwayRabbitMQ.Producer` under the hood.
 
-      defmodule MyConsumer do
-        use Lepus.Consumer
+  ## Features
+  * Optionally retries failed messages with exponential backoff
+  * Optionally publishes failed messages to separate queue
+  * Supports [RPC](https://www.rabbitmq.com/tutorials/tutorial-six-elixir.html)
 
+  ## Topology
+
+  ```txt
+  ┌►   [queue]
+  │       │
+  │       ▼
+  │ (Lepus.Consumer) ───► {failed exchange} ───► [failed queue]
+  │       │
+  │       ▼
+  │ {delay exchange}
+  │       │
+  │       ▼
+  │ [retry queue]
+  │       │
+  │       ▼
+  └ {retry exchange}
+  ```
+
+  ## Example
+
+  Define a consumer:
+
+      defmodule MyApp.MyConsumer do
+        @behaviour Lepus.Consumer
+
+        @impl Lepus.Consumer
         def options do
           [
             connection: [
@@ -16,131 +46,105 @@ defmodule Lepus.Consumer do
               password: "guest"
             ],
             exchange: "my_exchange",
-            routing_key: "my_routing_key"
-            processor: [concurrency: 10]
+            routing_key: "my_routing_key",
+            queue: "my_queue",
+            store_errors: true,
+            max_retry_count: 5
           ]
+        end
+
+        @impl Lepus.Consumer
+        def handle_message(data, metadata) do
+          Do.something_with(data, metadata)
         end
       end
 
-  ## Options:
+  Then add it to your supervision tree (usually in `lib/my_app/application.ex`):
 
-    * `:connection` - Required. AMQP URI or a set of options used by the RabbitMQ client.
-      See `AMQP.Connection.open/1` for the full list of options.
-    * `:exchange` - Required. RabbitMQ exchange name.
-    * `:routing_key` - Required. RabbitMQ routing key name.
-    * `:retriable` - Optional. Default is `true`. Doesn't retry failed messages if is `false`.
-    * `:delay_exchange` - Optional. Redefines delay exchange name.
-      Default value is `"my_exchange.delay"`
-    * `:retry_exchange` - Optional. Redefines retry exchange name.
-      Default value is `"my_exchange.retry"`
-    * `:queue` - Optional. Redefines queue name.
-      Default value is `"my_exchange.my_routing_key"`
-    * `:retry_queue` - Optional. Redefines retry queue name.
-      Default value is `"my_exchange.my_routing_key.retry"`
-    * `processor`  - Optional. Broadway processor options.
+      children = [
+        {Lepus.Consumer, consumers: [MyApp.MyConsumer]}
+      ]
 
+      children |> Supervisor.start_link(strategy: :one_for_one)
+
+  You can also define some global options for all the consumers in the supervision tree:
+
+      children = [
+        {Lepus.Consumer,
+          consumers: [MyApp.MyConsumer, MyApp.OtherConsumer],
+          options: [connection: rabbit_connection, exchange: "my_exchange"]}
+      ]
+
+      children |> Supervisor.start_link(strategy: :one_for_one)
   """
 
-  @callback options() :: Keyword.t()
-  @callback handle_message(any(), map()) :: :ok | {:error, String.t()}
-  @callback handle_failed(any(), map()) :: any()
+  use Supervisor
 
-  @optional_callbacks handle_failed: 2
+  @type payload :: any()
 
-  alias Lepus.RabbitClient
-
-  defmacro __using__(_) do
-    quote do
-      @behaviour Lepus.Consumer
-
-      def start_link(opts \\ []) do
-        built_opts = __MODULE__ |> Lepus.Consumer.build_all_opts(opts)
-        __MODULE__ |> Lepus.Broadway.start_link(built_opts)
-      end
-
-      def child_spec(opts) do
-        %{
-          id: __MODULE__,
-          shutdown: :infinity,
-          start: {__MODULE__, :start_link, [opts]}
+  @type metadata :: %{
+          rpc: boolean(),
+          retry_count: non_neg_integer(),
+          retriable: boolean(),
+          client: String.t() | nil,
+          rabbit_mq_metadata: map()
         }
-      end
-    end
+
+  @doc """
+  Should return keyword list of options (if defined).
+  You can also define options in the supervision tree as described above.
+
+  ## Options
+
+  #{Options.definition() |> NimbleOptions.docs()}
+  """
+  @callback options() :: Keyword.t()
+
+  @doc """
+  Receives message `payload` and `metadata`.
+
+  ## `payload`
+
+  Usually it's a binary RabbitMQ message payload.
+  But it could be parsed JSON (map, list, etc.)
+  if content type of the message is "application/json" or it was sent via `c:Lepus.publish_json/4`
+
+  ## `metadata`
+
+  It's a map with the keys:
+
+  * `rpc` - Defines if the message was sent using
+    [RPC](https://www.rabbitmq.com/tutorials/tutorial-six-elixir.html) pattern
+    (`reply_to` and `correlation_id` is not empty).
+    The function should return `{:ok, result}` if `rpc` is `true`.
+
+  * `retry_count` - Count of retries if the message was retried. Otherwise `0`.
+
+  * `retriable` – Defines if the message will be retried in case of error.
+
+  * `client` – `"lepus"` if the message was sent via `c:Lepus.publish/4` or `c:Lepus.publish_json/4`.
+
+  * `rabbit_mq_metadata` - `metadata` field from `BroadwayRabbitMQ.Producer`.
+  """
+  @callback handle_message(payload, metadata) ::
+              :ok | {:ok, binary()} | :error | {:error, binary()}
+
+  @optional_callbacks options: 0
+
+  @spec start_link(keyword) :: Supervisor.on_start()
+  def start_link(opts) do
+    __MODULE__ |> Supervisor.start_link(opts, name: __MODULE__)
   end
 
-  def build_all_opts(consumer_module, dynamic_opts) do
-    static_opts = consumer_module.options()
+  @impl Supervisor
+  def init(opts) do
+    options = opts |> Keyword.get(:options, [])
 
-    %{
-      connection: fetch_opt!(static_opts, dynamic_opts, :connection),
-      private_data: build_private_data(static_opts, dynamic_opts),
-      strategy_data: build_strategy_data(static_opts, dynamic_opts),
-      processor: build_processor_opts(static_opts, dynamic_opts)
-    }
-  end
-
-  def build_strategy_data(static_opts, dynamic_opts) do
-    exchange = fetch_opt!(static_opts, dynamic_opts, :exchange)
-    routing_key = fetch_opt!(static_opts, dynamic_opts, :routing_key)
-
-    %{
-      retriable: get_opt(static_opts, dynamic_opts, :retriable, true),
-      exchange: exchange,
-      routing_key: routing_key,
-      delay_exchange:
-        strategy_opt(static_opts, dynamic_opts, :delay_exchange, [exchange, "delay"]),
-      retry_exchange:
-        strategy_opt(static_opts, dynamic_opts, :retry_exchange, [exchange, "retry"]),
-      queue: strategy_opt(static_opts, dynamic_opts, :queue, [exchange, routing_key]),
-      retry_queue:
-        strategy_opt(static_opts, dynamic_opts, :retry_queue, [exchange, routing_key, "retry"])
-    }
-  end
-
-  defp build_private_data(static_opts, dynamic_opts) do
-    %{
-      broadway_producer_module:
-        get_opt(static_opts, dynamic_opts, :broadway_producer_module, BroadwayRabbitMQ.Producer),
-      rabbit_client: get_opt(static_opts, dynamic_opts, :rabbit_client, RabbitClient),
-      name: get_opt(static_opts, dynamic_opts, :name, nil)
-    }
-  end
-
-  defp build_processor_opts(static_opts, dynamic_opts) do
-    processor_opts = get_opt(static_opts, dynamic_opts, :processor, [])
-    [concurrency: 1] |> Keyword.merge(processor_opts)
-  end
-
-  defp strategy_opt(static_opts, dynamic_opts, key, default_list) do
-    case fetch_opt(static_opts, dynamic_opts, key) do
-      {:ok, value} -> value
-      _ -> default_list |> Enum.reject(&(&1 in ["", nil])) |> Enum.join(".")
-    end
-  end
-
-  defp fetch_opt(static_opts, dynamic_opts, key) do
-    [dynamic_opts, static_opts]
-    |> Enum.reduce_while(:error, fn opts, acc ->
-      opts
-      |> Keyword.fetch(key)
-      |> case do
-        {:ok, value} -> {:halt, {:ok, value}}
-        _ -> {:cont, acc}
-      end
+    opts
+    |> Keyword.get(:consumers, [])
+    |> Enum.map(fn
+      module -> {Server, [consumer: module, options: options]}
     end)
-  end
-
-  defp fetch_opt!(static_opts, dynamic_opts, key) do
-    case fetch_opt(static_opts, dynamic_opts, key) do
-      {:ok, value} -> value
-      _ -> raise "option #{inspect(key)} is required"
-    end
-  end
-
-  defp get_opt(static_opts, dynamic_opts, key, default) do
-    case fetch_opt(static_opts, dynamic_opts, key) do
-      {:ok, value} -> value
-      _ -> default
-    end
+    |> Supervisor.init(strategy: :one_for_one)
   end
 end

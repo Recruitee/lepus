@@ -25,4 +25,6 @@ lepus-*.tar
 # VSCode ElixirLS dir
 .elixir_ls
 
+.DS_Store
+
 /log/

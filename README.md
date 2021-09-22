@@ -36,7 +36,7 @@ defmodule MyApp.MyConsumer do
   end
 
   @impl Lepus.Consumer
-  def handle_message(data, %{sync: true} = metadata) do
+  def handle_message(data, %{rpc: true} = metadata) do
     # do someting
     {:ok, response} # or `{:error, error}`
   end
@@ -87,7 +87,7 @@ children = [
     name: MyApp.RabbitMQ
     connection: rabbit_connection
     exchanges: ["my_exchange1", "my_exchange2"],
-    # if you wand use `sync: true` option
+    # if you wand use `rpc: true` option
     sync_opts: [
         pubsub: MyApp.PubSub
         reply_to_queue: "my_app.reply_to"
@@ -123,6 +123,6 @@ MyApp.MyRabbitMQClient.publish_json(
     key: "Value",
     list: [1, 2, 3]
   },
-  sync: true
+  rpc: true
 )
 ```

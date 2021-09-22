@@ -191,27 +191,27 @@ defmodule Lepus.BasicClient.ServerTest do
       refute Map.equal?(channel1, channel2)
     end
 
-    test ".publish doesn't publish with sync opt", %{client_name: client_name} do
+    test ".publish doesn't publish with rpc opt", %{client_name: client_name} do
       assert_raise RuntimeError,
-                   "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `sync` option",
+                   "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `rpc` option",
                    fn ->
                      client_name
                      |> BasicClient.publish("exchange1", "my_routing_key", "my_payload1",
-                       sync: true
+                       rpc: true
                      )
                    end
     end
 
-    test ".publish_json doesn't publish with sync opt", %{client_name: client_name} do
+    test ".publish_json doesn't publish with rpc opt", %{client_name: client_name} do
       assert_raise RuntimeError,
-                   "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `sync` option",
+                   "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `rpc` option",
                    fn ->
                      client_name
                      |> BasicClient.publish_json(
                        "exchange1",
                        "my_routing_key",
                        %{data: "my_payload1"},
-                       sync: true
+                       rpc: true
                      )
                    end
     end
@@ -257,7 +257,7 @@ defmodule Lepus.BasicClient.ServerTest do
                    client_name
                    |> BasicClient.publish("exchange1", "my_routing_key", "my_payload",
                      amqp_opts: [my_key: "my_value"],
-                     sync: true
+                     rpc: true
                    )
         end)
 
@@ -295,7 +295,7 @@ defmodule Lepus.BasicClient.ServerTest do
                      "my_routing_key",
                      %{my_payload: "my_payload"},
                      amqp_opts: [my_key: "my_value"],
-                     sync: true
+                     rpc: true
                    )
         end)
 
@@ -339,7 +339,7 @@ defmodule Lepus.BasicClient.ServerTest do
                    client_name
                    |> BasicClient.publish("exchange1", "my_routing_key", "my_payload",
                      amqp_opts: [my_key: "my_value"],
-                     sync: true
+                     rpc: true
                    )
         end)
 
@@ -372,7 +372,7 @@ defmodule Lepus.BasicClient.ServerTest do
                      "my_routing_key",
                      %{my_payload: "my_payload"},
                      amqp_opts: [my_key: "my_value"],
-                     sync: true
+                     rpc: true
                    )
         end)
 
@@ -412,7 +412,7 @@ defmodule Lepus.BasicClient.ServerTest do
                    client_name
                    |> BasicClient.publish("exchange1", "my_routing_key", "my_payload",
                      amqp_opts: [my_key: "my_value"],
-                     sync: true,
+                     rpc: true,
                      timeout: 1000
                    )
         end)
@@ -444,7 +444,7 @@ defmodule Lepus.BasicClient.ServerTest do
                      "my_routing_key",
                      %{my_payload: "my_payload"},
                      amqp_opts: [my_key: "my_value"],
-                     sync: true,
+                     rpc: true,
                      timeout: 1000
                    )
         end)

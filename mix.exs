@@ -24,11 +24,14 @@ defmodule Lepus.MixProject do
       {:broadway_rabbitmq, "~> 0.7"},
       {:jason, "~> 1.0"},
       {:phoenix_pubsub, ">= 1.0.0"},
+      {:nimble_options, ">= 0.3.7 and < 1.0.0"},
 
       # Dev tools
       {:credo, "~> 1.4", only: :dev, runtime: false},
       {:dialyxir, "~> 1.0", only: [:dev], runtime: false},
-      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false}
+      {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
+      {:ex_doc, "~> 0.25", only: :dev, runtime: false},
+      {:mox, "~> 1.0", only: :test}
     ]
   end
 end

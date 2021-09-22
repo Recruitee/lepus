@@ -12,7 +12,7 @@ defmodule Lepus.BasicClient.Publisher do
     opts = opts |> Keyword.put(:amqp_opts, amqp_opts)
 
     opts
-    |> Keyword.fetch(:sync)
+    |> Keyword.fetch(:rpc)
     |> case do
       {:ok, true} -> publish_sync(client_name, exchange, routing_key, payload, opts)
       _ -> publish(client_name, exchange, routing_key, payload, opts)
@@ -28,7 +28,7 @@ defmodule Lepus.BasicClient.Publisher do
     |> Store.get_sync_opts()
     |> case do
       [] ->
-        raise "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `sync` option"
+        raise "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `rpc` option"
 
       sync_opts ->
         reply_to_queue = sync_opts |> Keyword.fetch!(:reply_to_queue)

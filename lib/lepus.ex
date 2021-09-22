@@ -13,7 +13,7 @@ defmodule Lepus do
 
   defmacro __using__(opts) do
     client = opts |> Keyword.fetch!(:client)
-    name = opts |> Keyword.get(:name, __CALLER__.module())
+    name = opts |> Keyword.get(:name, __CALLER__.module)
 
     quote do
       alias Lepus.Client

@@ -28,7 +28,7 @@ defmodule Lepus.BasicClient do
   alias Lepus.BasicClient.ServerNames
   alias Lepus.BasicClient.Store
   alias Lepus.Client
-  alias Lepus.RabbitClient
+  alias Lepus.Rabbit
 
   @behaviour Client
 
@@ -65,7 +65,7 @@ defmodule Lepus.BasicClient do
       name: name,
       connection: init_arg |> Keyword.fetch!(:connection),
       exchanges: init_arg |> Keyword.fetch!(:exchanges),
-      rabbit_client: init_arg |> Keyword.get(:rabbit_client, RabbitClient),
+      rabbit_client: init_arg |> Keyword.get(:rabbit_client, Rabbit.BasicClient),
       producer_module: init_arg |> Keyword.get(:producer_module, BroadwayRabbitMQ.Producer),
       sync_opts: sync_opts
     }
