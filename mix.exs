@@ -1,13 +1,23 @@
 defmodule Lepus.MixProject do
   use Mix.Project
 
+  @version "0.1.0"
+  @description "Opinionated library for [RabbitMQ] with exponential backoff retries and RPC."
+  @source_url "https://github.com/Recruitee/lepus"
+
   def project do
     [
+      name: "Lepus",
+      version: @version,
+      description: @description,
+      source_url: @source_url,
       app: :lepus,
       version: "0.1.0",
       elixir: "~> 1.8",
       start_permanent: Mix.env() == :prod,
-      deps: deps()
+      deps: deps(),
+      docs: docs(),
+      package: package()
     ]
   end
 
@@ -32,6 +42,20 @@ defmodule Lepus.MixProject do
       {:mix_test_watch, "~> 1.0", only: :dev, runtime: false},
       {:ex_doc, "~> 0.25", only: :dev, runtime: false},
       {:mox, "~> 1.0", only: :test}
+    ]
+  end
+
+  def docs do
+    [
+      main: "readme",
+      extras: ["README.md"]
+    ]
+  end
+
+  defp package do
+    [
+      links: %{"GitHub" => @source_url},
+      licenses: ["MIT"]
     ]
   end
 end
