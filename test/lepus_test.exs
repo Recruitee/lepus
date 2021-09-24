@@ -1,61 +1,53 @@
 defmodule LepusTest do
   use ExUnit.Case, async: true
 
-  defmodule BasicClient do
-    def start_link(init_arg) do
-      {:start_link, [init_arg]}
-    end
+  alias Lepus.TestClient
 
-    def publish(name, exchange, routing_key, payload, options) do
-      {:publish, [name, exchange, routing_key, payload, options]}
-    end
-
-    def publish_json(name, exchange, routing_key, payload, options) do
-      {:publish_json, [name, exchange, routing_key, payload, options]}
-    end
-  end
+  import Mox
 
   defmodule CustomClient do
-    use Lepus, client: LepusTest.BasicClient
+    use Lepus, client: TestClient
   end
 
   describe ".publish" do
     test "with options" do
-      result = CustomClient.publish("exchange1", "routing_key", "payload", a: 1, b: 2)
+      TestClient
+      |> expect(:publish, fn
+        CustomClient, "exchange1", "routing_key", "payload", [a: 1, b: 2] -> :ok
+      end)
 
-      assert {:publish, [CustomClient, "exchange1", "routing_key", "payload", [a: 1, b: 2]]} =
-               result
+      assert :ok = CustomClient.publish("exchange1", "routing_key", "payload", a: 1, b: 2)
     end
 
     test "without options" do
-      result = CustomClient.publish("exchange1", "routing_key", "payload")
-      assert {:publish, [CustomClient, "exchange1", "routing_key", "payload", []]} = result
+      TestClient
+      |> expect(:publish, fn CustomClient, "exchange1", "routing_key", "payload", [] -> :ok end)
+
+      assert :ok = CustomClient.publish("exchange1", "routing_key", "payload")
     end
   end
 
   describe ".publish_json" do
     test "with options" do
-      result =
-        CustomClient.publish_json("exchange1", "routing_key", %{payload: "payload"},
-          a: 1,
-          b: 2
-        )
+      TestClient
+      |> expect(:publish_json, fn
+        CustomClient, "exchange1", "routing_key", %{payload: "data"}, [a: 1, b: 2] -> :ok
+      end)
 
-      assert {:publish_json,
-              [
-                CustomClient,
-                "exchange1",
-                "routing_key",
-                %{payload: "payload"},
-                [a: 1, b: 2]
-              ]} = result
+      assert :ok =
+               CustomClient.publish_json("exchange1", "routing_key", %{payload: "data"},
+                 a: 1,
+                 b: 2
+               )
     end
 
     test "without options" do
-      result = CustomClient.publish_json("exchange1", "routing_key", %{payload: "payload"})
+      TestClient
+      |> expect(:publish_json, fn
+        CustomClient, "exchange1", "routing_key", %{payload: "data"}, [] -> :ok
+      end)
 
-      assert {:publish_json,
-              [CustomClient, "exchange1", "routing_key", %{payload: "payload"}, []]} = result
+      assert :ok = CustomClient.publish_json("exchange1", "routing_key", %{payload: "data"})
     end
   end
 end

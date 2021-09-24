@@ -12,6 +12,6 @@ defmodule Lepus.BasicClient.Store do
 
   @spec get_sync_opts(atom) :: keyword()
   def get_sync_opts(client_name) do
-    client_name |> ServerNames.store() |> Agent.get(&Keyword.fetch!(&1, :sync_opts))
+    client_name |> ServerNames.store() |> Agent.get(&Keyword.fetch!(&1, :rpc_opts))
   end
 end

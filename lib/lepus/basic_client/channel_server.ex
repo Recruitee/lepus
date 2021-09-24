@@ -21,7 +21,14 @@ defmodule Lepus.BasicClient.ChannelServer do
   def publish(client_name, exchange, routing_key, payload, amqp_opts) do
     client_name
     |> ServerNames.channel_server(exchange)
-    |> GenServer.call({:publish, routing_key, payload, amqp_opts})
+    |> GenServer.whereis()
+    |> case do
+      nil ->
+        raise "There is no exchange with the '#{exchange}' name. Check the `:exchanges` option"
+
+      pid ->
+        pid |> GenServer.call({:publish, routing_key, payload, amqp_opts})
+    end
   end
 
   @impl GenServer

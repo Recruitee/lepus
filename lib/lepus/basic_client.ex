@@ -1,34 +1,53 @@
 defmodule Lepus.BasicClient do
+  alias Lepus.BasicClient.{
+    ChannelsSupervisor,
+    ConnectionServer,
+    Options,
+    Publisher,
+    RepliesBroadway,
+    ServerNames,
+    Store
+  }
+
+  alias Lepus.Client
+
   @moduledoc """
   Basic `Lepus.Client` implementation.
-  It uses supervised RabbitMQ connection and channels
 
-  Example usage:
+  ## Features
+  * Supervises `AMQP.Connection` process and many `AMQP.Channel` processes
+    (one `AMQP.Channel` process per exchange).
+  * Supports [RPC](https://www.rabbitmq.com/tutorials/tutorial-six-elixir.html)
 
-      {Lepus.BasicClient,
-       name: MyApp.RabbitMQ,
-       exchanges: ["exchange1", "exchange2"],
-       connection: [
-         host: "localhost",
-         port: 5672,
-         virtual_host: "/",
-         username: "guest",
-         password: "guest"
-       ],
-       sync_opts: [
-         pubsub: MyApp.PubSub
-         reply_to_queue: "my_app.reply_to"
-       ]}
+  ## Example usage
+
+  Add it to your supervision tree
+
+      children = [
+        {
+          Lepus.BasicClient,
+          name: MyApp.RabbitMQ,
+          exchanges: ["exchange1", "exchange2"],
+          connection: [
+            host: "localhost",
+            port: 5672,
+            virtual_host: "/",
+            username: "guest",
+            password: "guest"
+          ],
+          rpc_opts: [
+            pubsub: MyApp.PubSub,
+            reply_to_queue: "my_app.reply_to"
+          ]
+        }
+      ]
+
+      children |> Supervisor.start_link(strategy: :one_for_one)
+
+  ## Options
+
+  #{Options.definition() |> NimbleOptions.docs()}
   """
-
-  alias Lepus.BasicClient.ChannelsSupervisor
-  alias Lepus.BasicClient.ConnectionServer
-  alias Lepus.BasicClient.Publisher
-  alias Lepus.BasicClient.RepliesBroadway
-  alias Lepus.BasicClient.ServerNames
-  alias Lepus.BasicClient.Store
-  alias Lepus.Client
-  alias Lepus.Rabbit
 
   @behaviour Client
 
@@ -44,57 +63,34 @@ defmodule Lepus.BasicClient do
     }
   end
 
-  def start_link(init_arg) do
-    name = init_arg |> Keyword.fetch!(:name)
-
-    sync_opts =
-      init_arg
-      |> Keyword.fetch(:sync_opts)
-      |> case do
-        {:ok, [_ | _] = opts} ->
-          [
-            pubsub: opts |> Keyword.fetch!(:pubsub),
-            reply_to_queue: opts |> Keyword.fetch!(:reply_to_queue)
-          ]
-
-        _ ->
-          []
-      end
-
-    init_arg = %{
-      name: name,
-      connection: init_arg |> Keyword.fetch!(:connection),
-      exchanges: init_arg |> Keyword.fetch!(:exchanges),
-      rabbit_client: init_arg |> Keyword.get(:rabbit_client, Rabbit.BasicClient),
-      producer_module: init_arg |> Keyword.get(:producer_module, BroadwayRabbitMQ.Producer),
-      sync_opts: sync_opts
-    }
-
-    Supervisor.start_link(__MODULE__, init_arg, name: name)
+  def start_link(opts) do
+    with {:ok, bult_opts} <- opts |> Options.build() do
+      name = bult_opts |> Keyword.fetch!(:name)
+      __MODULE__ |> Supervisor.start_link(bult_opts, name: name)
+    end
   end
 
   @impl Supervisor
-  def init(%{
-        name: name,
-        connection: conn_opts,
-        exchanges: exchanges,
-        rabbit_client: rabbit_client,
-        sync_opts: sync_opts,
-        producer_module: producer_module
-      }) do
-    children = [
-      {Store, client_name: name, sync_opts: sync_opts},
+  def init(opts) do
+    [conn_opts, name, rabbit_client, rpc_opts] =
+      [:connection, :name, :rabbit_client, :rpc_opts]
+      |> Enum.map(&Keyword.fetch!(opts, &1))
+
+    [
+      {Store, client_name: name, rpc_opts: rpc_opts},
       {ConnectionServer, conn_opts: conn_opts, client_name: name, rabbit_client: rabbit_client},
       {Registry, keys: :unique, name: ServerNames.registry(name)},
-      {ChannelsSupervisor, client_name: name, exchanges: exchanges, rabbit_client: rabbit_client},
+      {ChannelsSupervisor,
+       client_name: name,
+       exchanges: opts |> Keyword.fetch!(:exchanges),
+       rabbit_client: rabbit_client},
       {RepliesBroadway,
        client_name: name,
-       sync_opts: sync_opts,
+       rpc_opts: rpc_opts,
        conn_opts: conn_opts,
-       producer_module: producer_module}
+       broadway_producer_module: opts |> Keyword.fetch!(:broadway_producer_module)}
     ]
-
-    Supervisor.init(children, strategy: :one_for_all)
+    |> Supervisor.init(strategy: :one_for_all)
   end
 
   @impl Client

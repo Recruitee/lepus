@@ -88,7 +88,7 @@ children = [
     connection: rabbit_connection
     exchanges: ["my_exchange1", "my_exchange2"],
     # if you wand use `rpc: true` option
-    sync_opts: [
+    rpc_opts: [
         pubsub: MyApp.PubSub
         reply_to_queue: "my_app.reply_to"
     ]

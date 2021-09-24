@@ -8,21 +8,21 @@ defmodule Lepus.BasicClient.RepliesBroadway do
 
   use Broadway
 
-  def start_link(init_arg), do: init_arg |> Keyword.fetch!(:sync_opts) |> start_link(init_arg)
+  def start_link(init_arg), do: init_arg |> Keyword.fetch!(:rpc_opts) |> start_link(init_arg)
 
-  def start_link([_ | _] = sync_opts, init_arg) do
-    [client_name, conn_opts, producer_module] =
-      [:client_name, :conn_opts, :producer_module]
+  def start_link([_ | _] = rpc_opts, init_arg) do
+    [client_name, conn_opts, broadway_producer_module] =
+      [:client_name, :conn_opts, :broadway_producer_module]
       |> Enum.map(&Keyword.fetch!(init_arg, &1))
 
     name = client_name |> ServerNames.replies_broadway()
-    [queue, pubsub] = [:reply_to_queue, :pubsub] |> Enum.map(&Keyword.fetch!(sync_opts, &1))
+    [queue, pubsub] = [:reply_to_queue, :pubsub] |> Enum.map(&Keyword.fetch!(rpc_opts, &1))
 
     Broadway.start_link(__MODULE__,
       name: name,
       producer: [
         module: {
-          producer_module,
+          broadway_producer_module,
           on_failure: :ack,
           connection: conn_opts,
           queue: queue,

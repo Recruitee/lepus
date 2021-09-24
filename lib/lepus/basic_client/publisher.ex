@@ -6,6 +6,8 @@ defmodule Lepus.BasicClient.Publisher do
   alias Lepus.BroadwayHelpers
   alias Phoenix.PubSub
 
+  def default_timeout, do: :infinity
+
   def call(client_name, exchange, routing_key, payload, opts) do
     amqp_opts = opts |> Keyword.get(:amqp_opts, []) |> put_timestamp() |> put_client()
     {payload, amqp_opts} = opts |> Keyword.get(:json, false) |> maybe_json(payload, amqp_opts)
@@ -28,12 +30,12 @@ defmodule Lepus.BasicClient.Publisher do
     |> Store.get_sync_opts()
     |> case do
       [] ->
-        raise "Add `sync_opts` to the `Lepus.BasicClient` configuration for using `rpc` option"
+        raise "Add `rpc_opts` to the `Lepus.BasicClient` configuration for using `rpc` option"
 
-      sync_opts ->
-        reply_to_queue = sync_opts |> Keyword.fetch!(:reply_to_queue)
+      rpc_opts ->
+        reply_to_queue = rpc_opts |> Keyword.fetch!(:reply_to_queue)
         correlation_id = gen_correlation_id()
-        timeout = opts |> Keyword.get(:timeout, :infinity)
+        timeout = opts |> Keyword.get(:timeout, default_timeout())
 
         amqp_opts =
           opts
@@ -41,7 +43,7 @@ defmodule Lepus.BasicClient.Publisher do
           |> Keyword.merge(reply_to: reply_to_queue, correlation_id: correlation_id)
           |> put_reply_timeout(timeout)
 
-        sync_opts
+        rpc_opts
         |> Keyword.fetch!(:pubsub)
         |> PubSub.subscribe(pubsub_topic(reply_to_queue, correlation_id))
 
