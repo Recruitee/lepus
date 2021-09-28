@@ -98,20 +98,32 @@ defmodule Lepus.Consumer.Options do
 
   @spec build(atom, keyword) :: {:ok, keyword} | {:error, String.t()}
   def build(consumer_module, global_opts) do
-    local_opts =
-      consumer_module
-      |> function_exported?(:options, 0)
-      |> case do
-        true -> consumer_module.options()
-        _ -> []
-      end
-
-    global_opts
-    |> Keyword.merge(local_opts)
-    |> NimbleOptions.validate(definition())
-    |> case do
-      {:ok, opts} -> {:ok, set_defaults(opts)}
+    with {:ok, local_opts} <- consumer_module |> fetch_options(),
+         {:ok, opts} <-
+           global_opts |> Keyword.merge(local_opts) |> NimbleOptions.validate(definition()) do
+      {:ok, set_defaults(opts)}
+    else
       {:error, %{message: reason}} -> {:error, reason}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp fetch_options(consumer_module) do
+    with :ok <- consumer_module |> ensure_loaded(),
+         true <- consumer_module |> function_exported?(:options, 0) do
+      {:ok, consumer_module.options()}
+    else
+      false -> {:ok, []}
+      {:error, reason} -> {:error, reason}
+    end
+  end
+
+  defp ensure_loaded(module) do
+    module
+    |> Code.ensure_loaded()
+    |> case do
+      {:module, _} -> :ok
+      {:error, reason} -> {:error, "Can't load #{inspect(module)} (#{inspect(reason)})"}
     end
   end
 

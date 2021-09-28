@@ -338,5 +338,12 @@ defmodule Lepus.Consumer.OptionsTest do
       assert {:ok, opts} = TestConsumer |> Options.build(global_opts)
       assert [c: 1, d: 2] = opts |> Keyword.fetch!(:processor)
     end
+
+    test "with non existent `consumer_module`", %{default_opts: default_opts} do
+      global_opts = default_opts |> Keyword.put(:processor, a: 1, b: 2)
+
+      assert {:error, "Can't load NonExistentConsumer (:nofile)"} =
+               NonExistentConsumer |> Options.build(global_opts)
+    end
   end
 end

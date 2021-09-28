@@ -7,6 +7,9 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
   alias Lepus.Consumer.QueuesTopology
   alias Lepus.Rabbit
 
+  defmodule NullConsumer do
+  end
+
   describe ".declare_function/2" do
     setup ctx do
       base_opts =
