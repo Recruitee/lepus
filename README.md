@@ -2,8 +2,6 @@
 
 Opinionated library for [RabbitMQ](https://www.rabbitmq.com/).
 
-![lepus](https://user-images.githubusercontent.com/1102853/73840963-c1bd1c80-4819-11ea-9112-d17120ad3a77.jpg)
-
 ## Documentation
 
 [HexDocs](https://hexdocs.pm/lepus)

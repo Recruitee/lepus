@@ -48,7 +48,7 @@ defmodule Lepus.Consumer do
             exchange: "my_exchange",
             routing_key: "my_routing_key",
             queue: "my_queue",
-            store_errors: true,
+            store_failed: true,
             max_retry_count: 5
           ]
         end
