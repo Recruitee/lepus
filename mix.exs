@@ -1,7 +1,7 @@
 defmodule Lepus.MixProject do
   use Mix.Project
 
-  @version "0.1.1"
+  @version "0.1.2"
   @description "Opinionated library for RabbitMQ with exponential backoff retries and RPC."
   @source_url "https://github.com/Recruitee/lepus"
 
