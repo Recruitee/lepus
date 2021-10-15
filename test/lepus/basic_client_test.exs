@@ -425,7 +425,8 @@ defmodule Lepus.BasicClient.ServerTest do
                    my_key: "my-value",
                    headers: [{"my-header", :binary, "my-header-value"}]
                  ],
-                 rpc: true
+                 rpc: true,
+                 timeout: :infinity
                )
 
       assert_receive {:publish, [_channel, "my-exchange", "my-routing-key", "my-payload", opts]}
@@ -453,7 +454,8 @@ defmodule Lepus.BasicClient.ServerTest do
                    my_key: "my-value",
                    headers: [{"my-header", :binary, "my-header-value"}]
                  ],
-                 rpc: true
+                 rpc: true,
+                 timeout: :infinity
                )
 
       assert_receive {:publish,

@@ -6,7 +6,7 @@ defmodule Lepus.BasicClient.Publisher do
   alias Lepus.BroadwayHelpers
   alias Phoenix.PubSub
 
-  def default_timeout, do: :infinity
+  def default_timeout, do: 5000
 
   def call(client_name, exchange, routing_key, payload, opts) do
     amqp_opts = opts |> Keyword.get(:amqp_opts, []) |> put_timestamp() |> put_client()
