@@ -77,17 +77,20 @@ defmodule Lepus.BasicClient.ChannelServer do
 
   @impl GenServer
   def handle_info({:DOWN, _, :process, channel_pid, reason}, %{channel: %{pid: channel_pid}}) do
-    {:stop, {:connection_lost, reason}, nil}
+    {:stop, reason, nil}
   end
 
+  def handle_info(_, state), do: {:noreply, state}
+
   @impl GenServer
-  def terminate(_reason, %{rabbit_client: rabbit_client, channel: channel})
-      when not is_nil(channel) do
+  def terminate(_reason, state), do: close_channel(state)
+
+  defp close_channel(%{rabbit_client: rabbit_client, channel: channel})
+       when not is_nil(channel) do
     rabbit_client.close_channel(channel)
   end
 
-  @impl GenServer
-  def terminate(_reason, _state), do: nil
+  defp close_channel(_state), do: :ok
 
   defp open_channel(rabbit_client, client_name) do
     client_name

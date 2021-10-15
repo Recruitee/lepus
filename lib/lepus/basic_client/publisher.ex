@@ -43,26 +43,38 @@ defmodule Lepus.BasicClient.Publisher do
           |> Keyword.merge(reply_to: reply_to_queue, correlation_id: correlation_id)
           |> put_reply_timeout(timeout)
 
-        rpc_opts
-        |> Keyword.fetch!(:pubsub)
-        |> PubSub.subscribe(pubsub_topic(reply_to_queue, correlation_id))
-
+        pubsub_topic = reply_to_queue |> pubsub_topic(correlation_id)
+        pubsub = rpc_opts |> Keyword.fetch!(:pubsub)
+        pubsub |> PubSub.subscribe(pubsub_topic)
         ChannelServer.publish(client_name, exchange, routing_key, payload, amqp_opts)
-        timeout |> wait_for_reply()
+        timeout |> wait_for_reply(pubsub, pubsub_topic)
     end
   end
 
-  defp wait_for_reply(:infinity) do
+  defp wait_for_reply(:infinity, pubsub, pubsub_topic) do
+    result =
+      receive do
+        {:lepus, :error, :timeout} -> {:error, :timeout}
+        {:lepus, status, value} -> {status, value}
+      end
+
+    pubsub |> PubSub.unsubscribe(pubsub_topic)
+
     receive do
-      {:lepus, :error, :timeout} -> {:error, :timeout}
-      {:lepus, status, value} -> {status, value}
+      {:lepus, _, _} -> :ok
+    after
+      0 -> :ok
     end
+
+    result
   end
 
-  defp wait_for_reply(timeout) do
+  defp wait_for_reply(timeout, pubsub, pubsub_topic) do
     timer_ref = self() |> Process.send_after({:lepus, :error, :timeout}, timeout)
 
-    case wait_for_reply(:infinity) do
+    :infinity
+    |> wait_for_reply(pubsub, pubsub_topic)
+    |> case do
       {:ok, _} = reply ->
         timer_ref |> Process.cancel_timer()
         reply

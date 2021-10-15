@@ -50,7 +50,7 @@ defmodule Lepus.BasicClient.ConnectionServer do
   @impl GenServer
   # if conn process dies
   def handle_info({:DOWN, _, :process, conn_pid, reason}, %{conn: %{pid: conn_pid}} = state) do
-    {:stop, {:connection_lost, reason}, state}
+    {:stop, reason, state}
   end
 
   @impl GenServer

@@ -360,10 +360,14 @@ defmodule Lepus.BasicClient.ServerTest do
         {:ok, %{pid: pid}}
       end
 
+      close_something = fn something ->
+        something.pid |> Agent.stop()
+      end
+
       Rabbit.TestClient |> stub(:open_connection, open_something)
       Rabbit.TestClient |> stub(:open_channel, open_something)
-      Rabbit.TestClient |> stub(:close_channel, fn _ -> :ok end)
-      Rabbit.TestClient |> stub(:close_connection, fn _ -> :ok end)
+      Rabbit.TestClient |> stub(:close_channel, close_something)
+      Rabbit.TestClient |> stub(:close_connection, close_something)
 
       Rabbit.TestClient
       |> stub(:declare_direct_exchange, fn _channel, _exchange, _opts -> :ok end)
@@ -382,9 +386,15 @@ defmodule Lepus.BasicClient.ServerTest do
             |> Keyword.new()
             |> Keyword.put(:correlation_id, correlation_id)
 
-          Broadway.all_running()
-          |> List.first()
-          |> Broadway.test_message(reply_payload, metadata: metadata)
+          reply_timeout = ctx |> Map.get(:reply_timeout, 0)
+
+          Task.async(fn ->
+            Process.sleep(reply_timeout)
+
+            Broadway.all_running()
+            |> List.first()
+            |> Broadway.test_message(reply_payload, metadata: metadata)
+          end)
         end
 
         :ok
@@ -480,6 +490,30 @@ defmodule Lepus.BasicClient.ServerTest do
     end
 
     test ".publish/5 publishes to rabbit and receives timeout error" do
+      assert {:error, :timeout} =
+               MyApp.RabbitMQ
+               |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
+                 rpc: true,
+                 timeout: 100
+               )
+    end
+
+    @tag reply_payload: ~s({"response": "Good"}),
+         reply_metadata: [
+           headers: [{"x-reply-status", :binary, "ok"}],
+           content_type: "application/json"
+         ],
+         reply_timeout: 200
+    test ".publish/5 doesn't respond with previous result", %{reply_timeout: reply_timeout} do
+      assert {:error, :timeout} =
+               MyApp.RabbitMQ
+               |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
+                 rpc: true,
+                 timeout: 100
+               )
+
+      Process.sleep(reply_timeout * 2)
+
       assert {:error, :timeout} =
                MyApp.RabbitMQ
                |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
