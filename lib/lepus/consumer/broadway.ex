@@ -141,7 +141,7 @@ defmodule Lepus.Consumer.Broadway do
       message
       |> BroadwayHelpers.get_header_value("x-reply-timeout", :infinity)
       |> case do
-        expiration when is_integer(expiration) -> [expiration: expiration]
+        expiration when is_integer(expiration) and expiration > 0 -> [expiration: "#{expiration}"]
         _ -> []
       end
       |> Keyword.merge(
