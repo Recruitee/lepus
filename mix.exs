@@ -23,14 +23,14 @@ defmodule Lepus.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:amqp, :lager, :logger]
+      extra_applications: [:amqp, :logger]
     ]
   end
 
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:broadway_rabbitmq, "~> 0.7"},
+      {:broadway_rabbitmq, git: "https://github.com/dashbitco/broadway_rabbitmq", branch: :main},
       {:jason, "~> 1.0"},
       {:phoenix_pubsub, ">= 1.0.0"},
       {:nimble_options, ">= 0.3.7 and < 1.0.0"},
