@@ -7,6 +7,7 @@ defmodule Lepus.Consumer.Broadway do
   use Broadway
 
   @spec start_link(module, keyword) :: :ignore | {:error, any} | {:ok, pid}
+
   def start_link(consumer_module, opts) do
     Broadway.start_link(__MODULE__,
       name: opts |> Keyword.get(:name, consumer_module),
