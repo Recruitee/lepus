@@ -23,7 +23,7 @@ defmodule Lepus.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      extra_applications: [:amqp, :lager, :logger]
+      extra_applications: [:amqp, :logger]
     ]
   end
 
