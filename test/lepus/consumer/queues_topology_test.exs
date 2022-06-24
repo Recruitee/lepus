@@ -42,8 +42,11 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       end)
 
       Rabbit.TestClient
-      |> expect(:declare_queue, fn
-        :test_channel, "my-queue", [durable: true] -> :ok
+      |> expect(:declare_queue, fn :test_channel, "my-queue", opts ->
+        assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
+                 opts |> Enum.sort()
+
+        :ok
       end)
 
       Rabbit.TestClient
@@ -65,14 +68,19 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
 
       Rabbit.TestClient
       |> expect(:declare_queue, 2, fn
-        :test_channel, "my-queue", [durable: true] ->
+        :test_channel, "my-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+                   opts |> Enum.sort()
+
           :ok
 
         :test_channel, "my-retry-queue", opts ->
+          assert [arguments: arguments, durable: true] = opts |> Enum.sort()
+
           assert [
-                   arguments: [{"x-dead-letter-exchange", :longstr, "my-retry-exchange"}],
-                   durable: true
-                 ] = opts |> Enum.sort()
+                   {"x-dead-letter-exchange", :longstr, "my-retry-exchange"},
+                   {"x-queue-type", :longstr, "classic"}
+                 ] = arguments |> Enum.sort()
 
           :ok
       end)
@@ -102,8 +110,17 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
 
       Rabbit.TestClient
       |> expect(:declare_queue, 2, fn
-        :test_channel, "my-queue", [durable: true] -> :ok
-        :test_channel, "my-failed-queue", [durable: true] -> :ok
+        :test_channel, "my-queue", opts ->
+          assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
+                   opts |> Enum.sort()
+
+          :ok
+
+        :test_channel, "my-failed-queue", opts ->
+          assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
+                   opts |> Enum.sort()
+
+          :ok
       end)
 
       Rabbit.TestClient
@@ -130,17 +147,78 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
 
       Rabbit.TestClient
       |> expect(:declare_queue, 3, fn
-        :test_channel, "my-queue", [durable: true] ->
+        :test_channel, "my-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+                   opts |> Enum.sort()
+
           :ok
 
-        :test_channel, "my-failed-queue", [durable: true] ->
+        :test_channel, "my-failed-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+                   opts |> Enum.sort()
+
           :ok
 
         :test_channel, "my-retry-queue", opts ->
+          assert [arguments: arguments, durable: true] = opts |> Enum.sort()
+
           assert [
-                   arguments: [{"x-dead-letter-exchange", :longstr, "my-retry-exchange"}],
-                   durable: true
-                 ] = opts |> Enum.sort()
+                   {"x-dead-letter-exchange", :longstr, "my-retry-exchange"},
+                   {"x-queue-type", :longstr, "classic"}
+                 ] = arguments |> Enum.sort()
+
+          :ok
+      end)
+
+      Rabbit.TestClient
+      |> expect(:bind_queue, 4, fn
+        :test_channel, "my-queue", "my-exchange", [routing_key: "my-routing-key"] ->
+          :ok
+
+        :test_channel, "my-queue", "my-retry-exchange", [routing_key: "my-routing-key"] ->
+          :ok
+
+        :test_channel, "my-retry-queue", "my-delay-exchange", [routing_key: "my-routing-key"] ->
+          :ok
+
+        :test_channel, "my-failed-queue", "my-failed-exchange", [routing_key: "my-routing-key"] ->
+          :ok
+      end)
+
+      assert :ok = result.(:test_channel)
+    end
+
+    @tag redefine: [store_failed: true, max_retry_count: 1, queues_type: "quorum"]
+    test "declares base, retry & error topology with quorum queues", %{result: result} do
+      Rabbit.TestClient
+      |> expect(:declare_direct_exchange, 4, fn
+        :test_channel, "my-exchange", [durable: true] -> :ok
+        :test_channel, "my-delay-exchange", [durable: true] -> :ok
+        :test_channel, "my-retry-exchange", [durable: true] -> :ok
+        :test_channel, "my-failed-exchange", [durable: true] -> :ok
+      end)
+
+      Rabbit.TestClient
+      |> expect(:declare_queue, 3, fn
+        :test_channel, "my-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "quorum"}], durable: true] =
+                   opts |> Enum.sort()
+
+          :ok
+
+        :test_channel, "my-failed-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "quorum"}], durable: true] =
+                   opts |> Enum.sort()
+
+          :ok
+
+        :test_channel, "my-retry-queue", opts ->
+          assert [arguments: arguments, durable: true] = opts |> Enum.sort()
+
+          assert [
+                   {"x-dead-letter-exchange", :longstr, "my-retry-exchange"},
+                   {"x-queue-type", :longstr, "quorum"}
+                 ] = arguments |> Enum.sort()
 
           :ok
       end)
@@ -184,8 +262,11 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       end)
 
       Rabbit.TestClient
-      |> expect(:declare_queue, fn
-        :test_channel, "my-queue", [durable: true] -> :ok
+      |> expect(:declare_queue, fn :test_channel, "my-queue", opts ->
+        assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+                 opts |> Enum.sort()
+
+        :ok
       end)
 
       Rabbit.TestClient
@@ -209,14 +290,19 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
 
       Rabbit.TestClient
       |> expect(:declare_queue, 2, fn
-        :test_channel, "my-queue", [durable: true] ->
+        :test_channel, "my-queue", opts ->
+          assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+                   opts |> Enum.sort()
+
           :ok
 
         :test_channel, "my-retry-queue", opts ->
-          assert [
-                   arguments: [{"x-dead-letter-exchange", :longstr, "my-retry-exchange"}],
-                   durable: true
-                 ] = opts |> Enum.sort()
+          assert [arguments: arguments, durable: true] = opts |> Enum.sort()
+
+          [
+            {"x-dead-letter-exchange", :longstr, "my-retry-exchange"},
+            {"x-queue-type", :longstr, "classic"}
+          ] = arguments |> Enum.sort()
 
           :ok
       end)

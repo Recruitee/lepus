@@ -51,7 +51,7 @@ defmodule Lepus.Consumer.QueuesTopology do
       opts |> get_options([:rabbit_client, :exchange, :routing_key, :queue])
 
     with :ok <- channel |> rabbit_client.declare_direct_exchange(exchange, durable: true),
-         :ok <- channel |> rabbit_client.declare_queue(queue, durable: true) do
+         :ok <- channel |> declare_queue(queue, opts) do
       channel |> rabbit_client.bind_queue(queue, exchange, routing_key: routing_key)
     else
       error -> error
@@ -67,10 +67,9 @@ defmodule Lepus.Consumer.QueuesTopology do
          :ok <- channel |> rabbit_client.declare_direct_exchange(retry_exchange, durable: true),
          :ok <-
            channel
-           |> rabbit_client.declare_queue(retry_queue,
-             durable: true,
-             arguments: [{"x-dead-letter-exchange", :longstr, retry_exchange}]
-           ),
+           |> declare_queue(retry_queue, opts, [
+             {"x-dead-letter-exchange", :longstr, retry_exchange}
+           ]),
          :ok <-
            channel |> rabbit_client.bind_queue(queue, retry_exchange, routing_key: routing_key) do
       channel |> rabbit_client.bind_queue(retry_queue, delay_exchange, routing_key: routing_key)
@@ -81,11 +80,10 @@ defmodule Lepus.Consumer.QueuesTopology do
 
   defp declare_failed_topology(channel, opts) do
     [rabbit_client, routing_key, failed_exchange, failed_queue] =
-      [:rabbit_client, :routing_key, :failed_exchange, :failed_queue]
-      |> Enum.map(&Keyword.fetch!(opts, &1))
+      opts |> get_options([:rabbit_client, :routing_key, :failed_exchange, :failed_queue])
 
     with :ok <- channel |> rabbit_client.declare_direct_exchange(failed_exchange, durable: true),
-         :ok <- channel |> rabbit_client.declare_queue(failed_queue, durable: true) do
+         :ok <- channel |> declare_queue(failed_queue, opts) do
       channel |> rabbit_client.bind_queue(failed_queue, failed_exchange, routing_key: routing_key)
     else
       error -> error
@@ -93,4 +91,14 @@ defmodule Lepus.Consumer.QueuesTopology do
   end
 
   defp get_options(opts, keys), do: keys |> Enum.map(&Keyword.fetch!(opts, &1))
+
+  defp declare_queue(channel, queue, opts, arguments \\ []) do
+    [rabbit_client, queues_type] = opts |> get_options([:rabbit_client, :queues_type])
+
+    channel
+    |> rabbit_client.declare_queue(queue,
+      durable: true,
+      arguments: [{"x-queue-type", :longstr, queues_type} | arguments]
+    )
+  end
 end

@@ -1,6 +1,8 @@
 defmodule Lepus.Consumer.Options do
   @moduledoc false
 
+  queues_types = ["classic", "quorum"]
+
   definition = [
     # private options
     broadway_producer_module: [type: :atom, doc: false, default: BroadwayRabbitMQ.Producer],
@@ -87,6 +89,13 @@ defmodule Lepus.Consumer.Options do
       default: false,
       doc: """
       Defines if the failed message should be published to `failed_queue`.
+      """
+    ],
+    queues_type: [
+      type: {:in, queues_types},
+      default: "classic",
+      doc: """
+      Defines queues type (one of `#{inspect(queues_types)}`). Used during queue declaration.
       """
     ]
   ]
