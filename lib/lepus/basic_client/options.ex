@@ -1,6 +1,8 @@
 defmodule Lepus.BasicClient.Options do
   @moduledoc false
 
+  alias Lepus.Rabbit
+
   definition = [
     # private options
     broadway_producer_module: [type: :atom, doc: false, default: BroadwayRabbitMQ.Producer],
@@ -59,6 +61,12 @@ defmodule Lepus.BasicClient.Options do
           type: :string,
           doc: """
           Defines a queue name for the replies.
+          """
+        ],
+        queues_type: [
+          type: {:in, Rabbit.Config.allowed_queues_types()},
+          doc: """
+          Defines reply_to queue type (one of `#{inspect(Rabbit.Config.allowed_queues_types())}`). Used during queue declaration.
           """
         ]
       ]

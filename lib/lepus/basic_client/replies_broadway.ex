@@ -4,6 +4,7 @@ defmodule Lepus.BasicClient.RepliesBroadway do
   alias Lepus.BasicClient.Publisher
   alias Lepus.BasicClient.ServerNames
   alias Lepus.BroadwayHelpers
+  alias Lepus.Rabbit
   alias Phoenix.PubSub
 
   use Broadway
@@ -17,6 +18,7 @@ defmodule Lepus.BasicClient.RepliesBroadway do
 
     name = client_name |> ServerNames.replies_broadway()
     [queue, pubsub] = [:reply_to_queue, :pubsub] |> Enum.map(&Keyword.fetch!(rpc_opts, &1))
+    queues_type = rpc_opts |> Keyword.get(:queues_type, Rabbit.Config.default_queues_type())
 
     Broadway.start_link(__MODULE__,
       name: name,
@@ -26,7 +28,7 @@ defmodule Lepus.BasicClient.RepliesBroadway do
           on_failure: :ack,
           connection: conn_opts,
           queue: queue,
-          declare: [durable: true],
+          declare: [durable: true, arguments: [{"x-queue-type", :longstr, queues_type}]],
           metadata: [:content_type, :correlation_id, :headers]
         },
         concurrency: 1

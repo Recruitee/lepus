@@ -1,7 +1,7 @@
 defmodule Lepus.Consumer.Options do
   @moduledoc false
 
-  queues_types = ["classic", "quorum"]
+  alias Lepus.Rabbit
 
   definition = [
     # private options
@@ -92,10 +92,10 @@ defmodule Lepus.Consumer.Options do
       """
     ],
     queues_type: [
-      type: {:in, queues_types},
-      default: "classic",
+      type: {:in, Rabbit.Config.allowed_queues_types()},
+      default: Rabbit.Config.default_queues_type(),
       doc: """
-      Defines queues type (one of `#{inspect(queues_types)}`). Used during queue declaration.
+      Defines queues type (one of `#{inspect(Rabbit.Config.allowed_queues_types())}`). Used during queue declaration.
       """
     ]
   ]

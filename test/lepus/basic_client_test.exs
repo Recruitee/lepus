@@ -116,7 +116,61 @@ defmodule Lepus.BasicClient.ServerTest do
       assert :ack = producer_module_opts |> Keyword.fetch!(:on_failure)
       assert "my-rabbit-mq-connection" = producer_module_opts |> Keyword.fetch!(:connection)
       assert "my-reply-to-queue" = producer_module_opts |> Keyword.fetch!(:queue)
-      assert [durable: true] = producer_module_opts |> Keyword.fetch!(:declare)
+
+      assert [arguments: [{"x-queue-type", :longstr, "classic"}], durable: true] =
+               producer_module_opts |> Keyword.fetch!(:declare) |> Enum.sort()
+
+      assert [:content_type, :correlation_id, :headers] =
+               producer_module_opts |> Keyword.fetch!(:metadata) |> Enum.sort()
+
+      assert :ok = MyApp.RabbitMQ |> GenServer.stop(:normal)
+    end
+
+    test "RPC with quorum reply_to queue" do
+      assert {:ok, _server} =
+               BasicClient.start_link(
+                 rabbit_client: Rabbit.TestClient,
+                 name: MyApp.RabbitMQ,
+                 connection: "my-rabbit-mq-connection",
+                 exchanges: ["my-exchange1", "my-exchange2"],
+                 broadway_producer_module: TestProducer,
+                 rpc_opts: [
+                   pubsub: MyApp.PubSub,
+                   reply_to_queue: "my-reply-to-queue",
+                   queues_type: "quorum"
+                 ]
+               )
+
+      assert_receive {:open_connection, ["my-rabbit-mq-connection"]}
+
+      assert_receive {:open_channel, [%{pid: connection_pid}]}
+      assert_receive {:open_channel, [%{pid: ^connection_pid}]}
+      assert_receive {:open_channel, [%{pid: ^connection_pid}]}
+
+      assert_receive {:declare_direct_exchange, [%{pid: channel0_pid}, "", [durable: true]]}
+
+      assert_receive {:declare_direct_exchange,
+                      [%{pid: channel1_pid}, "my-exchange1", [durable: true]]}
+
+      assert_receive {:declare_direct_exchange,
+                      [%{pid: channel2_pid}, "my-exchange2", [durable: true]]}
+
+      refute channel0_pid == channel1_pid
+      refute channel0_pid == channel2_pid
+      refute channel1_pid == channel2_pid
+
+      assert_receive {:producer_init, [broadway_opts]}
+
+      producer_opts = broadway_opts |> Keyword.fetch!(:broadway) |> Keyword.fetch!(:producer)
+
+      assert {TestProducer, producer_module_opts} = producer_opts |> Keyword.fetch!(:module)
+
+      assert :ack = producer_module_opts |> Keyword.fetch!(:on_failure)
+      assert "my-rabbit-mq-connection" = producer_module_opts |> Keyword.fetch!(:connection)
+      assert "my-reply-to-queue" = producer_module_opts |> Keyword.fetch!(:queue)
+
+      assert [arguments: [{"x-queue-type", :longstr, "quorum"}], durable: true] =
+               producer_module_opts |> Keyword.fetch!(:declare) |> Enum.sort()
 
       assert [:content_type, :correlation_id, :headers] =
                producer_module_opts |> Keyword.fetch!(:metadata) |> Enum.sort()
