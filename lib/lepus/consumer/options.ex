@@ -93,7 +93,6 @@ defmodule Lepus.Consumer.Options do
     ],
     queues_type: [
       type: {:in, Rabbit.Config.allowed_queues_types()},
-      default: Rabbit.Config.default_queues_type(),
       doc: """
       Defines queues type (one of `#{inspect(Rabbit.Config.allowed_queues_types())}`). Used during queue declaration.
       """

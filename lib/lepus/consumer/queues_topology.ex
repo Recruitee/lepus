@@ -93,7 +93,8 @@ defmodule Lepus.Consumer.QueuesTopology do
   defp get_options(opts, keys), do: keys |> Enum.map(&Keyword.fetch!(opts, &1))
 
   defp declare_queue(channel, queue, opts, arguments \\ []) do
-    [rabbit_client, queues_type] = opts |> get_options([:rabbit_client, :queues_type])
+    [rabbit_client] = opts |> get_options([:rabbit_client])
+    queues_type = opts |> Keyword.get(:queues_type, Rabbit.Config.default_queues_type())
 
     channel
     |> rabbit_client.declare_queue(queue,
