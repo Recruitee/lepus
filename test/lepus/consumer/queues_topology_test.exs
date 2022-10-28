@@ -35,29 +35,6 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
 
     setup :verify_on_exit!
 
-    test "declares only base topology", %{result: result} do
-      Rabbit.TestClient
-      |> expect(:declare_direct_exchange, fn
-        :test_channel, "my-exchange", [durable: true] -> :ok
-      end)
-
-      Rabbit.TestClient
-      |> expect(:declare_queue, fn :test_channel, "my-queue", opts ->
-        assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
-                 opts |> Enum.sort()
-
-        :ok
-      end)
-
-      Rabbit.TestClient
-      |> expect(:bind_queue, fn
-        :test_channel, "my-queue", "my-exchange", [routing_key: "my-routing-key"] -> :ok
-      end)
-
-      assert :ok = result.(:test_channel)
-    end
-
-    @tag redefine: [max_retry_count: 1]
     test "declares base & retry topology", %{result: result} do
       Rabbit.TestClient
       |> expect(:declare_direct_exchange, 3, fn
@@ -101,41 +78,6 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
     end
 
     @tag redefine: [store_failed: true]
-    test "declares base & error topology", %{result: result} do
-      Rabbit.TestClient
-      |> expect(:declare_direct_exchange, 2, fn
-        :test_channel, "my-exchange", [durable: true] -> :ok
-        :test_channel, "my-failed-exchange", [durable: true] -> :ok
-      end)
-
-      Rabbit.TestClient
-      |> expect(:declare_queue, 2, fn
-        :test_channel, "my-queue", opts ->
-          assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
-                   opts |> Enum.sort()
-
-          :ok
-
-        :test_channel, "my-failed-queue", opts ->
-          assert [{:arguments, [{"x-queue-type", :longstr, "classic"}]}, {:durable, true}] =
-                   opts |> Enum.sort()
-
-          :ok
-      end)
-
-      Rabbit.TestClient
-      |> expect(:bind_queue, 2, fn
-        :test_channel, "my-queue", "my-exchange", [routing_key: "my-routing-key"] ->
-          :ok
-
-        :test_channel, "my-failed-queue", "my-failed-exchange", [routing_key: "my-routing-key"] ->
-          :ok
-      end)
-
-      assert :ok = result.(:test_channel)
-    end
-
-    @tag redefine: [store_failed: true, max_retry_count: 1]
     test "declares base, retry & error topology", %{result: result} do
       Rabbit.TestClient
       |> expect(:declare_direct_exchange, 4, fn
@@ -188,7 +130,7 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       assert :ok = result.(:test_channel)
     end
 
-    @tag redefine: [store_failed: true, max_retry_count: 1, queues_type: "quorum"]
+    @tag redefine: [store_failed: true, queues_type: "quorum"]
     test "declares base, retry & error topology with quorum queues", %{result: result} do
       Rabbit.TestClient
       |> expect(:declare_direct_exchange, 4, fn
@@ -241,7 +183,7 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       assert :ok = result.(:test_channel)
     end
 
-    @tag redefine: [store_failed: true, max_retry_count: 1]
+    @tag redefine: [store_failed: true]
     test "doesn't declare any topology in case of error in base declaration", %{result: result} do
       Rabbit.TestClient
       |> expect(:declare_direct_exchange, fn
@@ -251,7 +193,7 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       assert {:error, "can't declare exchange"} = result.(:test_channel)
     end
 
-    @tag redefine: [store_failed: true, max_retry_count: 1]
+    @tag redefine: [store_failed: true]
     test "doesn't declare retry & error topologies in case of error in retry declaration", %{
       result: result
     } do
@@ -278,7 +220,7 @@ defmodule Lepus.Consumer.QueuesTopologyTest do
       assert {:error, "can't declare exchange"} = result.(:test_channel)
     end
 
-    @tag redefine: [store_failed: true, max_retry_count: 1]
+    @tag redefine: [store_failed: true]
     test "doesn't declare error topology in case of error in error declaration", %{result: result} do
       Rabbit.TestClient
       |> expect(:declare_direct_exchange, 4, fn

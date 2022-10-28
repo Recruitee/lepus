@@ -6,14 +6,14 @@ defmodule Lepus.Consumer.QueuesTopology do
   @spec declare_function(keyword) :: (Rabbit.Client.channel() -> :ok | {:error, any})
   def declare_function(opts) do
     functions =
-      [&declare_base_topology/2]
-      |> maybe_add_retry_topology(opts)
-      |> maype_add_failed_topology(opts)
-      |> Enum.reverse()
+      opts
+      |> Keyword.fetch!(:store_failed)
+      |> case do
+        true -> [&declare_base_topology/2, &declare_retry_topology/2, &declare_failed_topology/2]
+        _ -> [&declare_base_topology/2, &declare_retry_topology/2]
+      end
 
-    fn channel ->
-      functions |> run(channel, opts)
-    end
+    fn channel -> run(functions, channel, opts) end
   end
 
   defp run(functions, channel, opts) do
@@ -26,24 +26,6 @@ defmodule Lepus.Consumer.QueuesTopology do
         error -> {:halt, error}
       end
     end)
-  end
-
-  defp maype_add_failed_topology(functions, opts) do
-    opts
-    |> Keyword.fetch!(:store_failed)
-    |> case do
-      true -> [(&declare_failed_topology/2) | functions]
-      _ -> functions
-    end
-  end
-
-  defp maybe_add_retry_topology(functions, opts) do
-    opts
-    |> Keyword.fetch!(:max_retry_count)
-    |> case do
-      count when count > 0 -> [(&declare_retry_topology/2) | functions]
-      _ -> functions
-    end
   end
 
   defp declare_base_topology(channel, opts) do

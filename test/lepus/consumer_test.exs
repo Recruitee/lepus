@@ -55,16 +55,35 @@ defmodule Lepus.ConsumerTest do
       end)
 
       Rabbit.TestClient
-      |> expect(:declare_direct_exchange, fn :my_channel, "my-exchange", _ -> :ok end)
+      |> expect(:declare_direct_exchange, 3, fn
+        :my_channel, "my-exchange", _ -> :ok
+        :my_channel, "my-exchange.delay", _ -> :ok
+        :my_channel, "my-exchange.retry", _ -> :ok
+      end)
 
       Rabbit.TestClient
-      |> expect(:declare_queue, fn :my_channel, "my-exchange.my-routing-key", _ -> :ok end)
+      |> expect(:declare_queue, 2, fn
+        :my_channel, "my-exchange.my-routing-key", _ -> :ok
+        :my_channel, "my-exchange.my-routing-key.retry", _ -> :ok
+      end)
 
       Rabbit.TestClient
-      |> expect(:bind_queue, fn
+      |> expect(:bind_queue, 3, fn
         :my_channel,
         "my-exchange.my-routing-key",
         "my-exchange",
+        [routing_key: "my-routing-key"] ->
+          :ok
+
+        :my_channel,
+        "my-exchange.my-routing-key",
+        "my-exchange.retry",
+        [routing_key: "my-routing-key"] ->
+          :ok
+
+        :my_channel,
+        "my-exchange.my-routing-key.retry",
+        "my-exchange.delay",
         [routing_key: "my-routing-key"] ->
           :ok
       end)
