@@ -3,15 +3,12 @@ defmodule Lepus.Client do
   Client behaviour used in `Lepus`.
   """
 
-  @typep success() :: :ok | {:ok, any()}
-  @typep error() :: {:error, any()}
-
   @type exchange :: String.t()
   @type routing_key :: String.t()
   @type binary_payload :: binary()
   @type payload :: term()
   @type opts :: keyword()
-  @type response() :: success() | error()
+  @type response() :: :ok | {:ok, any()} | {:error, any()}
 
   @callback publish(Supervisor.supervisor(), exchange, routing_key, binary_payload, opts) ::
               response()

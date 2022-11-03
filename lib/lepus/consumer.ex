@@ -125,6 +125,24 @@ defmodule Lepus.Consumer do
   * `client` – `"lepus"` if the message was sent via `c:Lepus.publish/4` or `c:Lepus.publish_json/4`.
 
   * `rabbit_mq_metadata` - `metadata` field from `BroadwayRabbitMQ.Producer`.
+
+  ## Should return in case of using RPC:
+
+  * `{:ok, response}` – so `c:Lepus.publish/4` or `c:Lepus.publish_json/4` returns `{:ok, response}`
+
+  * `{:error, response}` – so `c:Lepus.publish/4` or `c:Lepus.publish_json/4` returns `{:error, response}`
+
+  ## Should return in case of not using RPC:
+
+  * `:ok` – exists successfully.
+
+  * `:error` – exits with error. The message could be retried if `max_retry_count > 0`.
+
+  * `{:error, error_message}` – The same as `:error` but adds the `error_message` to RabbitMQ headers.
+
+  * `:retry` – always retries message (even if `max_retry_count == 0`).
+
+  * `{:retry, reason}` – The same as `:retry` but adds the `reason` to RabbitMQ headers.
   """
   @callback handle_message(payload, metadata) ::
               :ok | {:ok, payload} | :retry | {:retry, payload} | :error | {:error, payload}
