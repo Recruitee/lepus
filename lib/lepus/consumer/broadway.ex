@@ -43,30 +43,32 @@ defmodule Lepus.Consumer.Broadway do
   def prepare_messages(messages, context) do
     messages
     |> Enum.map(fn message ->
-      retry_count = message |> get_retry_count()
-      rpc? = message |> sync_message?()
+      retry_count = get_retry_count(message)
+      rpc? = rpc?(message)
+      retriable = not rpc? and retry_count < context.max_retry_count
+      client = BroadwayHelpers.get_header_value(message, "x-client", nil)
 
-      metadata =
-        message.metadata
-        |> Map.put(:lepus, %{
-          rpc: rpc?,
-          retry_count: retry_count,
-          retriable: not rpc? and retry_count < context.max_retry_count,
-          client: message |> BroadwayHelpers.get_header_value("x-client", nil)
-        })
-
-      %{message | metadata: metadata}
+      message
+      |> BroadwayHelpers.set_lepus_metadata(%{
+        rpc: rpc?,
+        retry_count: retry_count,
+        retriable: retriable,
+        client: client
+      })
     end)
   end
 
   @impl Broadway
-  def handle_message(_, message, context) do
+  def handle_message(_, %{metadata: %{lepus: %{rpc: true}}} = message, context) do
     message
     |> handle_by_consumer(context)
     |> case do
-      :ok ->
-        message
-
+      {:ok, _} = term -> term
+      {:error, _} = term -> term
+      :error -> {:error, ""}
+      _ -> {:ok, ""}
+    end
+    |> case do
       {:ok, response} ->
         message |> publish_success(response, context)
         message
@@ -76,44 +78,65 @@ defmodule Lepus.Consumer.Broadway do
     end
   end
 
+  def handle_message(_, message, context) do
+    message
+    |> handle_by_consumer(context)
+    |> case do
+      {:error, _} = term -> term
+      :error -> {:error, ""}
+      {:retry, _} = term -> term
+      :retry -> {:retry, ""}
+      _ -> :ok
+    end
+    |> case do
+      :ok ->
+        message
+
+      {:retry, reason} ->
+        message
+        |> BroadwayHelpers.put_in_lepus_metadata(:retriable, true)
+        |> Broadway.Message.failed(reason)
+
+      {:error, error} ->
+        message |> Broadway.Message.failed(error)
+    end
+  end
+
   @impl Broadway
   def handle_failed(messages, context) do
     messages
-    |> Enum.each(fn
-      %{metadata: %{lepus: %{rpc: true}}} = message -> message |> publish_error(context)
-      %{metadata: %{lepus: %{retriable: true}}} = message -> message |> retry_failed(context)
-      message -> if context.store_failed, do: message |> store_failed(context), else: :ok
+    |> Enum.each(fn message ->
+      handle_failed_message(message, context, message.metadata.lepus)
     end)
 
     messages
   end
+
+  defp handle_failed_message(message, context, %{rpc: true}), do: publish_error(message, context)
+  defp handle_failed_message(message, context, %{retriable: true}), do: retry(message, context)
+
+  defp handle_failed_message(message, %{store_failed: true} = context, _lepus_metadata) do
+    store_failed(message, context)
+  end
+
+  defp handle_failed_message(_message, _context, _lepus_metadata), do: :ok
 
   defp handle_by_consumer(message, context) do
     %{data: payload} = message |> BroadwayHelpers.maybe_decode_json()
     consumer_metadata = message |> build_consumer_metadata()
     %{consumer_module: consumer_module} = context
 
-    result =
-      message
-      |> case do
-        %{metadata: %{lepus: %{retriable: true}}} ->
-          try do
-            consumer_module.handle_message(payload, consumer_metadata)
-          rescue
-            error -> {:error, inspect(error)}
-          end
-
-        _ ->
-          context.consumer_module.handle_message(payload, consumer_metadata)
-      end
-
-    {consumer_metadata, result}
+    message
     |> case do
-      {%{rpc: true}, :ok} -> {:ok, ""}
-      {%{rpc: true}, {:ok, response}} -> {:ok, response}
-      {_, :error} -> {:error, ""}
-      {_, {:error, error}} -> {:error, error}
-      _ -> :ok
+      %{metadata: %{lepus: %{retriable: true}}} ->
+        try do
+          consumer_module.handle_message(payload, consumer_metadata)
+        rescue
+          error -> {:error, inspect(error)}
+        end
+
+      _ ->
+        consumer_module.handle_message(payload, consumer_metadata)
     end
   end
 
@@ -154,7 +177,7 @@ defmodule Lepus.Consumer.Broadway do
     |> context.rabbit_client.publish("", metadata.reply_to, response, opts)
   end
 
-  defp retry_failed(message, context) do
+  defp retry(message, context) do
     %{metadata: %{lepus: %{retry_count: retry_count}} = metadata} = message
 
     new_headers =
@@ -225,7 +248,7 @@ defmodule Lepus.Consumer.Broadway do
     "#{expiration_sec * 1000}"
   end
 
-  defp sync_message?(message) do
+  defp rpc?(message) do
     %{metadata: %{reply_to: reply_to, correlation_id: correlation_id}} = message
     [reply_to, correlation_id] |> Enum.all?(&(is_binary(&1) and &1 != ""))
   end

@@ -69,6 +69,19 @@ defmodule Lepus.BroadwayHelpers do
 
   def update_headers(_headers, tuples), do: tuples
 
+  @spec set_lepus_metadata(Message.t(), map()) :: Message.t()
+  def set_lepus_metadata(message, lepus_metadata) do
+    message |> Map.update!(:metadata, &Map.put(&1, :lepus, lepus_metadata))
+  end
+
+  @spec put_in_lepus_metadata(Message.t(), any(), any()) :: Message.t()
+  def put_in_lepus_metadata(message, key, value) do
+    message
+    |> Map.update!(:metadata, fn metadata ->
+      metadata |> Map.update(:lepus, %{key => value}, &Map.put(&1, key, value))
+    end)
+  end
+
   defp maybe_transform_json(%{metadata: %{content_type: @json_content_type}}, data, fun) do
     fun.(data)
   end

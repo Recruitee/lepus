@@ -127,7 +127,7 @@ defmodule Lepus.Consumer do
   * `rabbit_mq_metadata` - `metadata` field from `BroadwayRabbitMQ.Producer`.
   """
   @callback handle_message(payload, metadata) ::
-              :ok | {:ok, payload} | :error | {:error, payload}
+              :ok | {:ok, payload} | :retry | {:retry, payload} | :error | {:error, payload}
 
   @optional_callbacks options: 0
 

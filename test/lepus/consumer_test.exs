@@ -244,6 +244,47 @@ defmodule Lepus.ConsumerTest do
       refute_receive {:rabbit_mq_publish, _}
     end
 
+    @tag handle_message: {:return, {:retry, "Retry reason"}}
+    test "retries messages when handler returns retry tuple", %{
+      default_rabbit_mq_metadata: default_rabbit_mq_metadata
+    } do
+      TestConsumer |> Broadway.test_message("data", metadata: default_rabbit_mq_metadata)
+
+      assert_receive {:handle_message, [_data, _metadata]}
+
+      assert_receive {:rabbit_mq_publish,
+                      [:test_amqp_channel, "my-exchange.delay", "my-routing-key", "data", opts]}
+
+      assert [
+               {"my-header", :binary, "My Header Value"},
+               {"x-retries", :long, 1},
+               {"x-status-0", :binary, "Retry reason"}
+             ] = opts |> Keyword.fetch!(:headers) |> Enum.sort()
+
+      assert "my-content-type" = opts |> Keyword.fetch!(:content_type)
+      assert @timestamp = opts |> Keyword.fetch!(:timestamp)
+    end
+
+    @tag handle_message: {:return, :retry}
+    test "retries messages when handler returns retry atom", %{
+      default_rabbit_mq_metadata: default_rabbit_mq_metadata
+    } do
+      TestConsumer |> Broadway.test_message("data", metadata: default_rabbit_mq_metadata)
+
+      assert_receive {:handle_message, [_data, _metadata]}
+
+      assert_receive {:rabbit_mq_publish,
+                      [:test_amqp_channel, "my-exchange.delay", "my-routing-key", "data", opts]}
+
+      assert [
+               {"my-header", :binary, "My Header Value"},
+               {"x-retries", :long, 1}
+             ] = opts |> Keyword.fetch!(:headers) |> Enum.sort()
+
+      assert "my-content-type" = opts |> Keyword.fetch!(:content_type)
+      assert @timestamp = opts |> Keyword.fetch!(:timestamp)
+    end
+
     @tag consumer_options: [store_failed: true], handle_message: {:raise, "Test Exception!"}
     test "stores failded messages in case of exception", %{
       default_rabbit_mq_metadata: default_rabbit_mq_metadata
