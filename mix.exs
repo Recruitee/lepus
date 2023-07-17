@@ -33,7 +33,7 @@ defmodule Lepus.MixProject do
       {:broadway_rabbitmq, "~> 0.7"},
       {:jason, "~> 1.0"},
       {:phoenix_pubsub, ">= 1.0.0"},
-      {:nimble_options, ">= 0.3.7 and < 1.0.0"},
+      {:nimble_options, ">= 0.3.7 and < 2.0.0"},
 
       # Dev tools
       {:credo, "~> 1.4", only: :dev, runtime: false},
