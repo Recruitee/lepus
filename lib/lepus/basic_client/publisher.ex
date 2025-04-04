@@ -71,17 +71,10 @@ defmodule Lepus.BasicClient.Publisher do
 
   defp wait_for_reply(timeout, pubsub, pubsub_topic) do
     timer_ref = self() |> Process.send_after({:lepus, :error, :timeout}, timeout)
+    reply = wait_for_reply(:infinity, pubsub, pubsub_topic)
+    Process.cancel_timer(timer_ref)
 
-    :infinity
-    |> wait_for_reply(pubsub, pubsub_topic)
-    |> case do
-      {:ok, _} = reply ->
-        timer_ref |> Process.cancel_timer()
-        reply
-
-      error ->
-        error
-    end
+    reply
   end
 
   defp publish(client_name, exchange, routing_key, payload, opts) do

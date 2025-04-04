@@ -383,7 +383,9 @@ defmodule Lepus.BasicClient.ServerTest do
                    "Add `rpc_opts` to the `Lepus.BasicClient` configuration for using `rpc` option",
                    fn ->
                      MyApp.RabbitMQ
-                     |> BasicClient.publish("my-exchange1", "my-routing-key", "payload", rpc: true)
+                     |> BasicClient.publish("my-exchange1", "my-routing-key", "payload",
+                       rpc: true
+                     )
                    end
     end
 
@@ -575,6 +577,29 @@ defmodule Lepus.BasicClient.ServerTest do
                |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
                  rpc: true,
                  timeout: 100
+               )
+    end
+
+    @tag reply_payload: "Error message",
+         reply_metadata: [headers: [{"x-reply-status", :binary, "error"}]],
+         reply_timeout: 200
+    test ".publish/5 doesn't respond with previous timeout error", %{
+      reply_timeout: reply_timeout
+    } do
+      long_time = reply_timeout * 2
+
+      assert {:error, "Error message"} =
+               MyApp.RabbitMQ
+               |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
+                 rpc: true,
+                 timeout: long_time
+               )
+
+      assert {:error, "Error message"} =
+               MyApp.RabbitMQ
+               |> BasicClient.publish("my-exchange", "my-routing-key", "my-payload",
+                 rpc: true,
+                 timeout: long_time
                )
     end
 
